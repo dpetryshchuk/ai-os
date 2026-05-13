@@ -3,7 +3,7 @@ import { LangfuseExporter } from '@mastra/langfuse'
 import { Observability } from '@mastra/observability'
 import { PostgresStore } from '@mastra/pg'
 import { randomBytes } from 'crypto'
-import { mkdirSync, writeFileSync } from 'fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { extname, join } from 'path'
 import { jobsearchAgent } from './agents/jobsearch'
 import { pool } from './pool'
@@ -20,7 +20,7 @@ import {
   updateNote,
 } from './queries'
 
-const UPLOADS_DIR = '/home/dima/jobsearch/uploads'
+const UPLOADS_DIR = process.env.UPLOADS_DIR ?? '/app/uploads'
 const LANGFUSE_HOST = process.env.LANGFUSE_HOST ?? 'https://cloud.langfuse.com'
 
 const storage = new PostgresStore({
@@ -141,6 +141,37 @@ export const mastra = new Mastra({
           const id = c.req.param('id')
           await deleteNote(id)
           return c.json({ ok: true })
+        },
+      },
+      {
+        path: '/*',
+        method: 'GET' as const,
+        handler: async (c: any) => {
+          const reqPath = c.req.path === '/' ? '/index.html' : c.req.path
+          const publicDir = join(process.cwd(), 'public')
+          const filePath = join(publicDir, reqPath)
+          const mimeTypes: Record<string, string> = {
+            '.html': 'text/html; charset=utf-8',
+            '.js': 'application/javascript',
+            '.css': 'text/css',
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.svg': 'image/svg+xml',
+            '.json': 'application/json',
+            '.ico': 'image/x-icon',
+            '.woff2': 'font/woff2',
+            '.woff': 'font/woff',
+            '.ttf': 'font/ttf',
+          }
+          try {
+            const content = readFileSync(filePath)
+            const contentType = mimeTypes[extname(filePath)] ?? 'application/octet-stream'
+            return new Response(content, { headers: { 'Content-Type': contentType } })
+          } catch {
+            const html = readFileSync(join(publicDir, 'index.html'), 'utf-8')
+            return c.html(html)
+          }
         },
       },
     ],
