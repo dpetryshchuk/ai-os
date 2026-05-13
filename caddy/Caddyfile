@@ -1,0 +1,20 @@
+jobsearch.dmytropetryshchuk.com {
+  basicauth {
+    dima {$CADDY_BASIC_AUTH_HASH}
+  }
+  reverse_proxy jobsearch:4111
+}
+
+write.dmytropetryshchuk.com {
+  basicauth {
+    dima {$CADDY_BASIC_AUTH_HASH}
+  }
+  reverse_proxy writing-app:4112
+}
+
+log.dmytropetryshchuk.com {
+  basicauth {
+    dima {$CADDY_BASIC_AUTH_HASH}
+  }
+  reverse_proxy daily-log:4113
+}
