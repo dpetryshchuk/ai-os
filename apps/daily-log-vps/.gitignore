@@ -1,0 +1,7 @@
+node_modules/
+dist/
+public/
+.env
+*.js.map
+frontend/node_modules/
+frontend/dist/

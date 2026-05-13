@@ -1,0 +1,13 @@
+[Unit]
+Description=Jobsearch scrapers (one-shot)
+After=network.target
+
+[Service]
+Type=oneshot
+User=dima
+WorkingDirectory=/home/dima/jobsearch
+EnvironmentFile=/home/dima/jobsearch/.env
+ExecStart=/bin/bash /home/dima/jobsearch/deploy/scrape.sh
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=jobsearch-scraper

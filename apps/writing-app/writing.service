@@ -1,0 +1,14 @@
+[Unit]
+Description=Writing App
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/dima/writing-app
+EnvironmentFile=/home/dima/writing-app/.env
+ExecStart=/usr/bin/node /home/dima/writing-app/dist/server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

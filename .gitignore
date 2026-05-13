@@ -1,0 +1,24 @@
+node_modules/
+dist/
+.env
+.DS_Store
+.mcp.json
+
+# Mastra build output
+.mastra/output/
+.mastra/.build/
+
+# Database files
+db/*.sqlite
+db/*.sqlite-shm
+db/*.sqlite-wal
+db/backups/
+
+# Personal data (jobsearch)
+apps/jobsearch-vps/knowledge/
+apps/jobsearch-vps/STRATEGY.md
+apps/jobsearch-vps/morning-outputs/
+
+# Frontend build artifacts (built on VPS, not committed)
+apps/*/public/
+apps/*/frontend/dist/

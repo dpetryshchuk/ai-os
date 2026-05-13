@@ -1,0 +1,42 @@
+{
+  "name": "jobsearch",
+  "version": "1.0.0",
+  "description": "Job search pipeline — scrapers, SQLite, and Claude skills",
+  "scripts": {
+    "scrape": "tsx tools/scrape-yc-deep.ts && tsx tools/scrape-hn-jobs.ts && python tools/scrape-jobspy.py",
+    "scrape:yc-deep": "tsx tools/scrape-yc-deep.ts",
+    "scrape:hn": "tsx tools/scrape-hn-jobs.ts",
+    "scrape:remoteok": "tsx tools/scrape-remoteok.ts",
+    "scrape:simplify": "tsx tools/scrape-simplifyjobs.ts",
+    "scrape:jobspy": "python tools/scrape-jobspy.py",
+    "scrape:dry": "tsx tools/scrape-yc-deep.ts --dry && tsx tools/scrape-hn-jobs.ts --dry && tsx tools/scrape-remoteok.ts --dry && tsx tools/scrape-simplifyjobs.ts --dry",
+    "dev": "mastra dev",
+    "db:query": "tsx tools/query.ts",
+    "db:backup": "node -e \"const fs=require('fs');const d=new Date().toISOString().slice(0,10);fs.mkdirSync('db/backups',{recursive:true});fs.copyFileSync('db/jobsearch.sqlite','db/backups/'+d+'.sqlite');console.log('Backed up to db/backups/'+d+'.sqlite')\""
+  },
+  "keywords": [],
+  "author": "Dmytro Petryshchuk",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@mastra/core": "^1.32.1",
+    "@mastra/langfuse": "^1.2.5",
+    "@mastra/memory": "^1.17.5",
+    "@mastra/pg": "^1.10.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.217.0",
+    "@opentelemetry/sdk-node": "^0.217.0",
+    "@types/express": "^5.0.6",
+    "cheerio": "^1.2.0",
+    "dotenv": "^17.4.1",
+    "express": "^5.2.1",
+    "pg": "^8.20.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/pg": "^8.20.0",
+    "mastra": "^1.8.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  }
+}

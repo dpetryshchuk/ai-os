@@ -1,0 +1,8 @@
+{
+  "name": "vps-apps",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ]
+}

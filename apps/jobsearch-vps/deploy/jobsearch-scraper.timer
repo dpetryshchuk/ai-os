@@ -1,0 +1,10 @@
+[Unit]
+Description=Run jobsearch scrapers at 8am and 2pm daily
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+OnCalendar=*-*-* 14:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

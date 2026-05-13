@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Job Search — Database Schema</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0B0B09;
+    --surface: #131310;
+    --border: #242420;
+    --border-bright: #363630;
+    --text: #E8E6DF;
+    --text-dim: #6B6960;
+    --text-mid: #A8A49A;
+    --pk: #D4A017;
+    --fk: #6B9DC8;
+    --enum: #7BAF6E;
+    --line: #D4A01755;
+    --line-bright: #D4A017CC;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    min-height: 100vh;
+    overflow-x: auto;
+  }
+
+  header {
+    padding: 32px 48px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 24px;
+    animation: fadeDown 0.4s ease both;
+  }
+
+  header h1 {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--pk);
+  }
+
+  header span {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 300;
+  }
+
+  .legend {
+    margin-left: auto;
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+  }
+
+  .legend-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+
+  .canvas-wrap {
+    position: relative;
+    width: 1280px;
+    height: 780px;
+    margin: 0 auto;
+  }
+
+  svg.lines {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .rel-line {
+    stroke: var(--line-bright);
+    stroke-width: 1;
+    fill: none;
+    stroke-dasharray: 4 3;
+    animation: dashMove 20s linear infinite;
+  }
+
+  .rel-line.fk {
+    stroke: #6B9DC855;
+    stroke-dasharray: none;
+    stroke-width: 1px;
+  }
+
+  @keyframes dashMove {
+    to { stroke-dashoffset: -200; }
+  }
+
+  .table-card {
+    position: absolute;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    width: 230px;
+    animation: fadeUp 0.5s ease both;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .table-card:hover {
+    border-color: var(--border-bright);
+    box-shadow: 0 0 0 1px var(--border-bright), 0 8px 32px #00000066;
+    z-index: 10;
+  }
+
+  .table-card:nth-child(1) { animation-delay: 0.05s; }
+  .table-card:nth-child(2) { animation-delay: 0.1s; }
+  .table-card:nth-child(3) { animation-delay: 0.15s; }
+  .table-card:nth-child(4) { animation-delay: 0.2s; }
+  .table-card:nth-child(5) { animation-delay: 0.25s; }
+  .table-card:nth-child(6) { animation-delay: 0.3s; }
+
+  .table-header {
+    padding: 10px 14px 9px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .table-icon {
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--pk);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .table-icon svg {
+    width: 8px;
+    height: 8px;
+    fill: var(--pk);
+  }
+
+  .table-name {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    color: var(--text);
+    text-transform: uppercase;
+  }
+
+  .table-count {
+    margin-left: auto;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+
+  .col-list {
+    padding: 6px 0;
+  }
+
+  .col-row {
+    display: flex;
+    align-items: center;
+    padding: 4px 14px;
+    gap: 8px;
+    transition: background 0.15s;
+  }
+
+  .col-row:hover {
+    background: #ffffff06;
+  }
+
+  .col-badge {
+    font-size: 8px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    width: 22px;
+    text-align: center;
+    flex-shrink: 0;
+    color: var(--text-dim);
+  }
+
+  .col-badge.pk { color: var(--pk); }
+  .col-badge.fk { color: var(--fk); }
+
+  .col-name {
+    font-size: 10.5px;
+    color: var(--text-mid);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .col-name.pk-col { color: var(--text); }
+
+  .col-type {
+    font-size: 9px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  .col-type.enum { color: var(--enum); }
+  .col-type.fk-type { color: var(--fk); opacity: 0.7; }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 2px 0;
+  }
+
+  /* positions */
+  #t-companies    { top: 260px; left: 520px; }
+  #t-contacts     { top: 100px; left: 820px; }
+  #t-job-postings { top: 420px; left: 200px; }
+  #t-interactions { top: 340px; left: 820px; }
+  #t-events       { top: 100px; left: 1020px; width: 210px; }
+  #t-content      { top: 100px; left: 200px; width: 210px; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* grid overlay */
+  .canvas-wrap::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.3;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Schema</h1>
+  <span>jobsearch · postgres 16 + pgvector</span>
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-dot" style="background:var(--pk)"></div>
+      PRIMARY KEY
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:var(--fk)"></div>
+      FOREIGN KEY
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:var(--enum)"></div>
+      ENUM
+    </div>
+  </div>
+</header>
+
+<div class="canvas-wrap">
+
+  <!-- SVG relationship lines -->
+  <svg class="lines" viewBox="0 0 1280 780" preserveAspectRatio="none">
+    <!-- companies → job_postings -->
+    <path class="rel-line" d="M 520,310 C 460,310 460,490 430,490"/>
+    <!-- companies → contacts -->
+    <path class="rel-line" d="M 750,300 C 790,300 790,175 820,175"/>
+    <!-- contacts → interactions -->
+    <path class="rel-line" d="M 935,235 L 935,340"/>
+    <!-- contacts → events -->
+    <path class="rel-line" d="M 1050,175 L 1050,175 L 1020,175"/>
+  </svg>
+
+  <!-- COMPANIES -->
+  <div class="table-card" id="t-companies">
+    <div class="table-header">
+      <div class="table-icon">
+        <svg viewBox="0 0 8 8"><rect x="1" y="1" width="6" height="6"/></svg>
+      </div>
+      <span class="table-name">companies</span>
+    </div>
+    <div class="col-list">
+      <div class="col-row">
+        <span class="col-badge pk">PK</span>
+        <span class="col-name pk-col">id</span>
+        <span class="col-type">text</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">name</span>
+        <span class="col-type">text</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">website</span>
+        <span class="col-type">text?</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTACTS -->
+  <div class="table-card" id="t-contacts">
+    <div class="table-header">
+      <div class="table-icon">
+        <svg viewBox="0 0 8 8"><rect x="1" y="1" width="6" height="6"/></svg>
+      </div>
+      <span class="table-name">contacts</span>
+    </div>
+    <div class="col-list">
+      <div class="col-row">
+        <span class="col-badge pk">PK</span>
+        <span class="col-name pk-col">id</span>
+        <span class="col-type">text</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">name</span>
+        <span class="col-type">text</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge fk">FK</span>
+        <span class="col-name">company_id</span>
+        <span class="col-type fk-type">→ companies</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">role</span>
+        <span class="col-type">text?</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">source</span>
+        <span class="col-type enum">enum</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">stage</span>
+        <span class="col-type enum">enum</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">outreach_date</span>
+        <span class="col-type">date</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">notes</span>
+        <span class="col-type">text?</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge fk">FK</span>
+        <span class="col-name">event_id</span>
+        <span class="col-type fk-type">→ events?</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge fk">FK</span>
+        <span class="col-name">content_post_id</span>
+        <span class="col-type fk-type">→ content_posts?</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- JOB POSTINGS -->
+  <div class="table-card" id="t-job-postings">
+    <div class="table-header">
+      <div class="table-icon">
+        <svg viewBox="0 0 8 8"><rect x="1" y="1" width="6" height="6"/></svg>
+      </div>
+      <span class="table-name">job_postings</span>
+    </div>
+    <div class="col-list">
+      <div class="col-row">
+        <span class="col-badge pk">PK</span>
+        <span class="col-name pk-col">id</span>
+        <span class="col-type">text</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge fk">FK</span>
+        <span class="col-name">company_id</span>
+        <span class="col-type fk-type">→ companies</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">title</span>
+        <span class="col-type">text</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">link</span>
+        <span class="col-type">text?</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">source</span>
+        <span class="col-type enum">enum</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">scraped_date</span>
+        <span class="col-type">date</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">status</span>
+        <span class="col-type enum">enum</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">description</span>
+        <span class="col-type">text?</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">resume_path</span>
+        <span class="col-type">text?</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- INTERACTIONS -->
+  <div class="table-card" id="t-interactions">
+    <div class="table-header">
+      <div class="table-icon">
+        <svg viewBox="0 0 8 8"><rect x="1" y="1" width="6" height="6"/></svg>
+      </div>
+      <span class="table-name">interactions</span>
+    </div>
+    <div class="col-list">
+      <div class="col-row">
+        <span class="col-badge pk">PK</span>
+        <span class="col-name pk-col">id</span>
+        <span class="col-type">text</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge fk">FK</span>
+        <span class="col-name">contact_id</span>
+        <span class="col-type fk-type">→ contacts</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">date</span>
+        <span class="col-type">date</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">direction</span>
+        <span class="col-type enum">enum</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">notes</span>
+        <span class="col-type">text</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- EVENTS -->
+  <div class="table-card" id="t-events">
+    <div class="table-header">
+      <div class="table-icon">
+        <svg viewBox="0 0 8 8"><rect x="1" y="1" width="6" height="6"/></svg>
+      </div>
+      <span class="table-name">events</span>
+    </div>
+    <div class="col-list">
+      <div class="col-row">
+        <span class="col-badge pk">PK</span>
+        <span class="col-name pk-col">id</span>
+        <span class="col-type">text</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">name</span>
+        <span class="col-type">text</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">date</span>
+        <span class="col-type">date</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">notes</span>
+        <span class="col-type">text?</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTENT POSTS -->
+  <div class="table-card" id="t-content">
+    <div class="table-header">
+      <div class="table-icon">
+        <svg viewBox="0 0 8 8"><rect x="1" y="1" width="6" height="6"/></svg>
+      </div>
+      <span class="table-name">content_posts</span>
+    </div>
+    <div class="col-list">
+      <div class="col-row">
+        <span class="col-badge pk">PK</span>
+        <span class="col-name pk-col">id</span>
+        <span class="col-type">text</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">posted_date</span>
+        <span class="col-type">date</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">title</span>
+        <span class="col-type">text</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">impressions</span>
+        <span class="col-type">int</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">reactions</span>
+        <span class="col-type">int</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">comments</span>
+        <span class="col-type">int</span>
+      </div>
+      <div class="col-row">
+        <span class="col-badge"></span>
+        <span class="col-name">reposts</span>
+        <span class="col-type">int</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
