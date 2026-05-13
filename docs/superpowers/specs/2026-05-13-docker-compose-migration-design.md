@@ -46,9 +46,11 @@ ai-os/
 All app Dockerfiles use a two-stage build to keep production images small:
 
 - **Stage 1 (builder):** `node:20-alpine`, installs all deps, runs `npm run build` (tsc + Vite for writing-app and daily-log; `npx mastra build` for jobsearch)
-- **Stage 2 (runner):** `node:20-alpine`, copies only compiled output (`dist/`, `public/`) and installs prod deps only (`npm ci --omit=dev`), runs `node dist/server.js`
+- **Stage 2 (runner):** `node:20-alpine`, copies only compiled output and installs prod deps only (`npm ci --omit=dev`)
+  - `writing-app` and `daily-log`: copies `dist/` + `public/`, runs `node dist/server.js`
+  - `jobsearch`: copies `.mastra/output/` + `public/`, runs `node .mastra/output/index.mjs`
 
-The jobsearch app uses a different build command (`npx mastra build`) and will be validated during implementation — its runtime behaviour may differ from the other two apps.
+**jobsearch static files:** Mastra will serve the React frontend via a static file middleware added to `src/mastra/index.ts` (catch-all after all API routes). This makes the container fully self-contained — Caddy reverse-proxies all traffic to `:4111`.
 
 ## docker-compose.yml (outline)
 
@@ -73,6 +75,9 @@ services:
   jobsearch:
     image: ghcr.io/dpetryshchuk/ai-os/jobsearch:latest
     expose: ["4111"]
+    depends_on: [postgres]
+    volumes:
+      - jobsearch_uploads:/app/uploads
 
   postgres:
     image: postgres:16-alpine
@@ -85,6 +90,7 @@ services:
 volumes:
   caddy_data:
   postgres_data:
+  jobsearch_uploads:
 ```
 
 ## Caddyfile (outline)
@@ -115,7 +121,7 @@ Caddy resolves container names via the internal Docker network. HTTPS is handled
 ```
 POSTGRES_PASSWORD=
 CADDY_BASIC_AUTH_HASH=    # bcrypt hash, generated with: caddy hash-password
-ANTHROPIC_API_KEY=
+DEEPSEEK_API_KEY=         # used by jobsearch Mastra agent
 ```
 
 For a new client project: clone repo → copy `.env.example` to `.env` → fill in values → `docker compose up -d`.
