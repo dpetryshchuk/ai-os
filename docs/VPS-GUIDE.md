@@ -32,9 +32,9 @@ Everything needed to operate and extend the server.
 
 | App | Port | Domain | Service | VPS path | GitHub |
 |---|---|---|---|---|---|
-| jobsearch CRM | 4111 | `jobsearch.dmytropetryshchuk.com` | `jobsearch` | `/home/dima/jobsearch` | `dpetryshchuk/jobsearch-vps` |
-| writing app | 4112 | `write.dmytropetryshchuk.com` | `writing` | `/home/dima/writing-app` | `dpetryshchuk/writing-app-vps` |
-| daily log | 4113 | `log.dmytropetryshchuk.com` | `daily-log` | `/home/dima/daily-log` | `dpetryshchuk/daily-log-vps` |
+| jobsearch CRM | 4111 | `jobsearch.dmytropetryshchuk.com` | `jobsearch` | `/home/dima/vps-apps/apps/jobsearch-vps` | `dpetryshchuk/vps-apps` |
+| writing app | 4112 | `write.dmytropetryshchuk.com` | `writing` | `/home/dima/vps-apps/apps/writing-app` | `dpetryshchuk/vps-apps` |
+| daily log | 4113 | `log.dmytropetryshchuk.com` | `daily-log` | `/home/dima/vps-apps/apps/daily-log-vps` | `dpetryshchuk/vps-apps` |
 
 **Next available port:** 4114
 
