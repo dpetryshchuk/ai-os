@@ -1,0 +1,151 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      writing-app: ${{ steps.filter.outputs.writing-app }}
+      daily-log: ${{ steps.filter.outputs.daily-log }}
+      jobsearch: ${{ steps.filter.outputs.jobsearch }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            writing-app:
+              - 'apps/writing-app/**'
+              - 'packages/ui/**'
+            daily-log:
+              - 'apps/daily-log-vps/**'
+              - 'packages/ui/**'
+            jobsearch:
+              - 'apps/jobsearch-vps/**'
+              - 'packages/ui/**'
+            infra:
+              - 'docker-compose.yml'
+              - 'caddy/**'
+
+  deploy-writing-app:
+    needs: detect
+    if: needs.detect.outputs.writing-app == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/writing-app/Dockerfile
+          push: true
+          tags: ghcr.io/dpetryshchuk/ai-os/writing-app:latest
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/dima/vps-apps
+            docker compose pull writing-app
+            docker compose up -d writing-app
+
+  deploy-daily-log:
+    needs: detect
+    if: needs.detect.outputs.daily-log == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/daily-log-vps/Dockerfile
+          push: true
+          tags: ghcr.io/dpetryshchuk/ai-os/daily-log:latest
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/dima/vps-apps
+            docker compose pull daily-log
+            docker compose up -d daily-log
+
+  deploy-jobsearch:
+    needs: detect
+    if: needs.detect.outputs.jobsearch == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/jobsearch-vps/Dockerfile
+          push: true
+          tags: ghcr.io/dpetryshchuk/ai-os/jobsearch:latest
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/dima/vps-apps
+            docker compose pull jobsearch
+            docker compose up -d jobsearch
+
+  deploy-infra:
+    needs: detect
+    if: needs.detect.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy infra to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/dima/vps-apps
+            git fetch origin master && git reset --hard origin/master
+            docker compose up -d caddy
