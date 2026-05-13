@@ -20,6 +20,21 @@ import {
   updateNote,
 } from './queries'
 
+const STATIC_MIME_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.json': 'application/json',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.ttf': 'font/ttf',
+}
+
 const UPLOADS_DIR = process.env.UPLOADS_DIR ?? '/app/uploads'
 const LANGFUSE_HOST = process.env.LANGFUSE_HOST ?? 'https://cloud.langfuse.com'
 
@@ -146,31 +161,29 @@ export const mastra = new Mastra({
       {
         path: '/*',
         method: 'GET' as const,
-        handler: async (c: any) => {
+        handler: async (c: any, next: any) => {
+          if (c.req.path.startsWith('/api')) {
+            return next()
+          }
           const reqPath = c.req.path === '/' ? '/index.html' : c.req.path
           const publicDir = join(process.cwd(), 'public')
           const filePath = join(publicDir, reqPath)
-          const mimeTypes: Record<string, string> = {
-            '.html': 'text/html; charset=utf-8',
-            '.js': 'application/javascript',
-            '.css': 'text/css',
-            '.png': 'image/png',
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.svg': 'image/svg+xml',
-            '.json': 'application/json',
-            '.ico': 'image/x-icon',
-            '.woff2': 'font/woff2',
-            '.woff': 'font/woff',
-            '.ttf': 'font/ttf',
+          if (!filePath.startsWith(publicDir + '/')) {
+            const html = readFileSync(join(publicDir, 'index.html'), 'utf-8')
+            return c.html(html)
           }
           try {
             const content = readFileSync(filePath)
-            const contentType = mimeTypes[extname(filePath)] ?? 'application/octet-stream'
+            const contentType = STATIC_MIME_TYPES[extname(filePath)] ?? 'application/octet-stream'
             return new Response(content, { headers: { 'Content-Type': contentType } })
-          } catch {
-            const html = readFileSync(join(publicDir, 'index.html'), 'utf-8')
-            return c.html(html)
+          } catch (err: any) {
+            if (err?.code !== 'ENOENT') throw err
+            try {
+              const html = readFileSync(join(publicDir, 'index.html'), 'utf-8')
+              return c.html(html)
+            } catch {
+              return new Response('Frontend not built', { status: 503 })
+            }
           }
         },
       },
