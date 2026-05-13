@@ -1,0 +1,9 @@
+#!/bin/bash
+set -e
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-EOSQL
+  CREATE USER daily_log WITH PASSWORD '$DAILY_LOG_DB_PASSWORD';
+  CREATE DATABASE daily_log OWNER daily_log;
+  CREATE USER jobsearch WITH PASSWORD '$JOBSEARCH_DB_PASSWORD';
+  CREATE DATABASE jobsearch OWNER jobsearch;
+EOSQL
