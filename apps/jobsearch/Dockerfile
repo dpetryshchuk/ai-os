@@ -6,19 +6,19 @@ COPY packages/ui ./packages/ui
 
 # Backend deps
 COPY apps/jobsearch/package.json apps/jobsearch/package-lock.json ./apps/jobsearch/
-RUN cd apps/jobsearch-vps && npm ci
+RUN cd apps/jobsearch && npm ci
 
 # Frontend deps
 COPY apps/jobsearch/frontend/package.json apps/jobsearch/frontend/package-lock.json ./apps/jobsearch/frontend/
 RUN cd apps/jobsearch/frontend && npm install --legacy-peer-deps
 
-COPY apps/jobsearch-vps ./apps/jobsearch-vps
+COPY apps/jobsearch ./apps/jobsearch
 
 # Build React frontend → apps/jobsearch/public/ (vite outDir is ../public)
 RUN cd apps/jobsearch/frontend && npm run build
 
 # Bundle Mastra server → apps/jobsearch/.mastra/output/index.mjs
-RUN cd apps/jobsearch-vps && npx mastra build
+RUN cd apps/jobsearch && npx mastra build
 
 # ── Runner ──
 FROM node:22-alpine AS runner

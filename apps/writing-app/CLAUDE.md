@@ -73,9 +73,9 @@ Essays are markdown files at `CONTENT_DIR/<folder>/<slug>.md`. Frontmatter (gray
 
 ## Deploy
 
-Push to `master` → GitHub Actions → SSH → build → `sudo systemctl restart writing`.
+Push to `master` → GitHub Actions builds Docker image → pushes to GHCR → SSHs into VPS → `docker compose pull writing-app && docker compose up -d writing-app`.
 
-Service file: `writing.service` (copy to `/etc/systemd/system/` on VPS).
-VPS path: `/home/dima/writing-app/`.
+VPS path: `/home/dima/ai-os/` (monorepo, Docker Compose stack).
+Image: `ghcr.io/dpetryshchuk/ai-os/writing-app:latest`
 
 Full VPS ops guide: `../docs/VPS-GUIDE.md`.
