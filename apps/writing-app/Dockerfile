@@ -26,6 +26,8 @@ RUN cd apps/writing-app/frontend && npm run build
 FROM node:20-alpine AS runner
 # git and openssh-client are needed at runtime for git pull / git push
 RUN apk add --no-cache git openssh-client
+# allow git operations on the /repo volume mount (owned by host user, not container root)
+RUN git config --global --add safe.directory /repo
 WORKDIR /app
 COPY apps/writing-app/package.json apps/writing-app/package-lock.json ./
 RUN npm ci --omit=dev
