@@ -8,6 +8,7 @@ services:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile
       - ./caddy/auth_credentials:/etc/caddy/auth_credentials:ro
       - caddy_data:/data
+    command: sh -c "caddy fmt --overwrite /etc/caddy/Caddyfile && caddy run --config /etc/caddy/Caddyfile"
     networks:
       - internal
     restart: unless-stopped
