@@ -61,7 +61,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             set -e
-            cd /home/dima/vps-apps
+            cd /home/dima/ai-os
             docker compose pull writing-app
             docker compose up -d writing-app
 
@@ -95,7 +95,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             set -e
-            cd /home/dima/vps-apps
+            cd /home/dima/ai-os
             docker compose pull daily-log
             docker compose up -d daily-log
 
@@ -129,7 +129,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             set -e
-            cd /home/dima/vps-apps
+            cd /home/dima/ai-os
             docker compose pull jobsearch
             docker compose up -d jobsearch
 
@@ -146,6 +146,6 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             set -e
-            cd /home/dima/vps-apps
+            cd /home/dima/ai-os
             git fetch origin master && git reset --hard origin/master
             docker compose up -d caddy

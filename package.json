@@ -1,5 +1,5 @@
 {
-  "name": "vps-apps",
+  "name": "ai-os",
   "private": true,
   "workspaces": [
     "apps/*",
