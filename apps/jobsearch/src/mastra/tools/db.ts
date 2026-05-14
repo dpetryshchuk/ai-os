@@ -139,10 +139,15 @@ export const queryDb = createTool({
     sql: z.string(),
   }),
   execute: async ({ sql }) => {
-    const forbidden = /^\s*(insert|update|delete|drop|alter|truncate)/i
-    if (forbidden.test(sql)) return { error: 'Read-only. Use the specific write tools.' }
-    const result = await pool.query(sql)
-    return { rows: result.rows, count: result.rowCount }
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN READ ONLY')
+      const result = await client.query(sql)
+      return { rows: result.rows, count: result.rowCount }
+    } finally {
+      await client.query('ROLLBACK')
+      client.release()
+    }
   },
 })
 
