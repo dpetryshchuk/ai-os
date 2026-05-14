@@ -9,9 +9,10 @@ db/*.sqlite-shm
 db/*.sqlite-wal
 db/backups/
 
-# Mastra build cache
+# Mastra build cache and auto-generated files
 .mastra/output/
 .mastra/.build/
+.mastra/mastra-packages.json
 
 # Personal data
 knowledge/

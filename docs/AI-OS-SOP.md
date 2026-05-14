@@ -239,6 +239,26 @@ docker compose down && docker compose up -d
 **`expose` vs `ports` in Docker Compose**  
 `expose` only makes a port reachable within the Docker network — other containers can reach it by service name, but the host cannot. `ports` publishes to the host. Only Caddy needs `ports` (80/443). Never use localhost:PORT to test app containers directly — test through the domain via Caddy instead.
 
+**Writing app git push fails — SSH key or config issues**  
+The writing app mounts `~/.ssh` into the container to push to the personal site repo. Common failure points:
+
+- Stale SSH config entries referencing keys that don't exist → clean up `~/.ssh/config`
+- No SSH key on VPS → generate one: `ssh-keygen -t ed25519 -C "vps-writing-app" -f ~/.ssh/id_ed25519 -N ""`
+- Key not added to the target repo → github.com → repo → Settings → Deploy keys → Add (with write access)
+- Host key prompt hangs in container → add `StrictHostKeyChecking no` to SSH config
+
+Clean `~/.ssh/config` for the writing app:
+```
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/id_ed25519
+  IdentitiesOnly yes
+  StrictHostKeyChecking no
+```
+
+Test with: `ssh -T git@github.com`
+
 **Docker layer cache serves stale compiled output**  
 If a build uses `--no-cache` but the pushed digest is identical to what's already in the registry, the image on the VPS won't update. Confirm a new digest was pushed by checking the push output — new layers say `Pushed`, not `Layer already exists`.
 
