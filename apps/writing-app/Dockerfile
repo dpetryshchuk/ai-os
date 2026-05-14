@@ -1,5 +1,5 @@
 # Build context: repo root
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 # packages/ui is needed by the frontend's tailwind config and CSS imports
@@ -23,7 +23,7 @@ RUN cd apps/writing-app && npx tsc -p tsconfig.json
 RUN cd apps/writing-app/frontend && npm run build
 
 # ── Runner ──
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 # git and openssh-client are needed at runtime for git pull / git push
 RUN apk add --no-cache git openssh-client
 # allow git operations on the /repo volume mount (owned by host user, not container root)

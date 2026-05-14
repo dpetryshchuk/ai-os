@@ -94,10 +94,10 @@ Run locally (not on VPS) via SSH tunnel. Write to Postgres. Apply filters: no de
 
 ## Deploy
 
-Push to `master` → GitHub Actions → SSH → `git fetch && git reset --hard` → `npm install && npx mastra build && sudo systemctl restart jobsearch`
+Push to `master` → GitHub Actions builds Docker image → pushes to GHCR → SSHs into VPS → `docker compose pull jobsearch && docker compose up -d jobsearch`.
 
-VPS path: `/home/dima/jobsearch/`
-systemd service: `/etc/systemd/system/jobsearch.service`
-Entry point: `node /home/dima/jobsearch/.mastra/output/index.mjs`
+VPS path: `/home/dima/ai-os/` (monorepo, Docker Compose stack).
+Image: `ghcr.io/dpetryshchuk/ai-os/jobsearch:latest`
+Entry point: `node .mastra/output/index.mjs` (inside container)
 
 Full VPS ops: see `../docs/VPS-GUIDE.md`

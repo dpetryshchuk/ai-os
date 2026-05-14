@@ -6,24 +6,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Three apps in a monorepo, all deployed to the same Hetzner VPS (`46.225.78.10`, `dmytropetryshchuk.com`).
 
-| App | Dir | Port | Domain | GitHub |
-|---|---|---|---|---|
-| Job search CRM | `apps/jobsearch-vps/` | 4111 | `jobsearch.dmytropetryshchuk.com` | `dpetryshchuk/jobsearch-vps` |
-| Writing app | `apps/writing-app/` | 4112 | `write.dmytropetryshchuk.com` | `dpetryshchuk/writing-app-vps` |
-| Daily log | `apps/daily-log-vps/` | 4113 | `log.dmytropetryshchuk.com` | `dpetryshchuk/daily-log-vps` |
+| App | Dir | Port | Domain |
+|---|---|---|---|
+| Job search CRM | `apps/jobsearch/` | 4111 | `jobsearch.dmytropetryshchuk.com` |
+| Writing app | `apps/writing-app/` | 4112 | `write.dmytropetryshchuk.com` |
+| Daily log | `apps/daily-log/` | 4113 | `log.dmytropetryshchuk.com` |
 
 Next available port: **4114**
 
-See each app's own `CLAUDE.md` (e.g. `apps/jobsearch-vps/CLAUDE.md`) for app-specific commands and architecture.
+See each app's own `CLAUDE.md` (e.g. `apps/jobsearch/CLAUDE.md`) for app-specific commands and architecture.
 
 ## Shared stack
 
 All three apps follow the same pattern:
 
-- **Backend:** Express + TypeScript, compiled to `dist/server.js` via `tsc`
+- **Backend:** Express + TypeScript, compiled to `dist/server.js` via `tsc` (jobsearch uses Mastra → `.mastra/output/index.mjs`)
 - **Frontend:** React + Vite + Tailwind, built into `public/` at project root
 - **Tests:** Vitest (`npm test`)
-- **Deploy:** GitHub Actions → SSH → `git fetch && git reset --hard` → `npm install && npm run build` → `systemctl restart <service>`
+- **Deploy:** GitHub Actions builds Docker image → pushes to GHCR → `docker compose pull <app> && docker compose up -d <app>` on VPS
 
 ### Build pattern
 
@@ -41,11 +41,11 @@ npm test             # vitest run
 
 **Server:** Hetzner CX22 — `46.225.78.10` (`dmytropetryshchuk.com`). SSH: `ssh dima@46.225.78.10`.
 
-**Reverse proxy:** Caddy — `/etc/caddy/Caddyfile`. Each app gets a `basic_auth` + `reverse_proxy localhost:<port>` block.
+**Reverse proxy:** Caddy (Docker) — `caddy/Caddyfile`. Named `(auth)` snippet handles `basic_auth` for all subdomains.
 
-**Process manager:** systemd — one `.service` file per app in `/etc/systemd/system/`. Entry point is always `node /home/dima/<app-name>/dist/server.js`.
+**Containers:** Docker Compose — `docker-compose.yml`. One service per app plus `caddy` and `postgres`. All on an internal bridge network; only Caddy publishes ports 80/443.
 
-**Full operations guide:** `docs/VPS-GUIDE.md` — server details, adding new apps, Caddy config, systemd, GitHub Actions deploy, SSH key setup, DNS, port log, gotchas.
+**Full operations guide:** `docs/VPS-GUIDE.md` — server details, adding new apps, Caddy config, Docker Compose, GitHub Actions deploy, SSH key setup, DNS, port log, gotchas.
 
 ## Design language goal
 

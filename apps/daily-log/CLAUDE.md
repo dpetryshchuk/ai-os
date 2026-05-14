@@ -67,9 +67,9 @@ React + Vite + Tailwind. Built output is copied to `public/` at project root by 
 
 ## Deploy
 
-Push to `master` → GitHub Actions → SSH into VPS → build → `sudo systemctl restart daily-log`.
+Push to `master` → GitHub Actions builds Docker image → pushes to GHCR → SSHs into VPS → `docker compose pull daily-log && docker compose up -d daily-log`.
 
-Service file: `daily-log.service` (copy to `/etc/systemd/system/` on VPS).
-VPS path: `/home/dima/daily-log/`.
+VPS path: `/home/dima/ai-os/` (monorepo, Docker Compose stack).
+Image: `ghcr.io/dpetryshchuk/ai-os/daily-log:latest`
 
 Full VPS ops guide: `../docs/VPS-GUIDE.md`.
