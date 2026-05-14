@@ -6,9 +6,8 @@ services:
       - "443:443"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy/auth_credentials:/etc/caddy/auth_credentials:ro
       - caddy_data:/data
-    environment:
-      CADDY_BASIC_AUTH_HASH: ${CADDY_BASIC_AUTH_HASH}
     networks:
       - internal
     restart: unless-stopped
