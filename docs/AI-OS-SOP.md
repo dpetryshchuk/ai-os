@@ -223,6 +223,12 @@ site.example.com {
 }
 ```
 
+**Caddyfile format warnings on every start**  
+Caddy warns if the Caddyfile isn't formatted. Auto-format on startup via the `command` override in docker-compose.yml:
+```yaml
+command: sh -c "caddy fmt --overwrite /etc/caddy/Caddyfile && caddy run --config /etc/caddy/Caddyfile"
+```
+
 **Caddy can't reach Let's Encrypt (DNS resolution fails in container)**  
 Symptom: `dial tcp: lookup acme-v02.api.letsencrypt.org on 127.0.0.53:53: read: connection refused`. Fix: restart systemd-resolved on the host, then restart the stack:
 ```bash
