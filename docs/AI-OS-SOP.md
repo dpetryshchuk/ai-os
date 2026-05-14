@@ -208,6 +208,34 @@ When creating the PAT, check `read:org` (under the org section) in addition to `
 **`git pull` still prompts for username after `gh auth login`**  
 Run `gh auth setup-git` once — this wires gh's token into git's credential helper so HTTPS operations work without prompts.
 
+**Caddy `basicauth` directive is deprecated**  
+Use `basic_auth` instead. `basicauth` still works but logs warnings. Use a named snippet to avoid repeating it across sites:
+```caddy
+(auth) {
+  basic_auth {
+    import /etc/caddy/auth_credentials
+  }
+}
+
+site.example.com {
+  import auth
+  reverse_proxy app:4111
+}
+```
+
+**Caddy can't reach Let's Encrypt (DNS resolution fails in container)**  
+Symptom: `dial tcp: lookup acme-v02.api.letsencrypt.org on 127.0.0.53:53: read: connection refused`. Fix: restart systemd-resolved on the host, then restart the stack:
+```bash
+sudo systemctl restart systemd-resolved
+docker compose down && docker compose up -d
+```
+
+**`expose` vs `ports` in Docker Compose**  
+`expose` only makes a port reachable within the Docker network — other containers can reach it by service name, but the host cannot. `ports` publishes to the host. Only Caddy needs `ports` (80/443). Never use localhost:PORT to test app containers directly — test through the domain via Caddy instead.
+
+**Docker layer cache serves stale compiled output**  
+If a build uses `--no-cache` but the pushed digest is identical to what's already in the registry, the image on the VPS won't update. Confirm a new digest was pushed by checking the push output — new layers say `Pushed`, not `Layer already exists`.
+
 **Do I need `DATABASE_URL` in `.env`?**  
 No. `docker-compose.yml` constructs it from `DAILY_LOG_DB_PASSWORD` and `JOBSEARCH_DB_PASSWORD` and injects it automatically.
 
