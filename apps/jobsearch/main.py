@@ -69,8 +69,13 @@ async def agent_stream(body: dict, pool: asyncpg.Pool = Depends(get_pool)):
         raise HTTPException(400, "messages required")
 
     async def generate():
-        async for chunk in agentic_stream(messages, pool, _anthropic):
-            yield chunk
+        try:
+            async for chunk in agentic_stream(messages, pool, _anthropic):
+                yield chunk
+        except Exception as e:
+            import json as _json
+            yield f"data: {_json.dumps({'type': 'error', 'payload': {'message': str(e)}})}\n\n"
+            yield "data: [DONE]\n\n"
 
     return StreamingResponse(
         generate(),

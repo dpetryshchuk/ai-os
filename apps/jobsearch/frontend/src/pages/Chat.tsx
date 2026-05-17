@@ -208,6 +208,8 @@ export default function Chat() {
               toolCallMap[toolCallId] = { ...toolCallMap[toolCallId], result }
               updateMessage(agentId, m => ({ ...m, toolCalls: Object.values(toolCallMap) }))
             }
+          } else if (chunk.type === 'error' && chunk.payload?.message) {
+            updateMessage(agentId, m => ({ ...m, text: `Error: ${chunk.payload.message}`, thinking: false }))
           }
         }
       }
