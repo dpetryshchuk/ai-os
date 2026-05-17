@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI OS</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0a0a0a;
+      color: #e5e5e5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    h1 {
+      font-size: 1rem;
+      font-weight: 500;
+      color: #666;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 3rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      width: 100%;
+      max-width: 700px;
+    }
+    a {
+      display: block;
+      padding: 1.5rem;
+      background: #141414;
+      border: 1px solid #222;
+      border-radius: 8px;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    a:hover {
+      border-color: #444;
+      background: #1a1a1a;
+    }
+    .name {
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: #e5e5e5;
+      margin-bottom: 0.35rem;
+    }
+    .desc {
+      font-size: 0.8rem;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <h1>AI OS</h1>
+  <div class="grid">
+    <a href="https://jobsearch.dmytropetryshchuk.com">
+      <div class="name">Job Search</div>
+      <div class="desc">CRM + agent</div>
+    </a>
+    <a href="https://write.dmytropetryshchuk.com">
+      <div class="name">Writing</div>
+      <div class="desc">Essays + publishing</div>
+    </a>
+    <a href="https://log.dmytropetryshchuk.com">
+      <div class="name">Daily Log</div>
+      <div class="desc">Journal + habits</div>
+    </a>
+  </div>
+</body>
+</html>

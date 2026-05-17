@@ -4,6 +4,12 @@
   }
 }
 
+home.dmytropetryshchuk.com {
+  import auth
+  root * /home/dima/ai-os/home
+  file_server
+}
+
 jobsearch.dmytropetryshchuk.com {
   import auth
   reverse_proxy localhost:4111
