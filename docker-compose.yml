@@ -10,6 +10,10 @@ services:
       FREEWRITE_DIR: /freewrite
       GITHUB_TOKEN: ${GITHUB_TOKEN}
       GITHUB_REPO: ${GITHUB_REPO}
+      GIT_AUTHOR_NAME: Dima
+      GIT_AUTHOR_EMAIL: dmytrodim@gmail.com
+      GIT_COMMITTER_NAME: Dima
+      GIT_COMMITTER_EMAIL: dmytrodim@gmail.com
     volumes:
       - ${WRITING_DIR:-/tmp/writing}:/repo
       - ${FREEWRITE_DIR:-/home/dima/freewrite}:/freewrite
