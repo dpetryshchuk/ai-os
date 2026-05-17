@@ -5,7 +5,7 @@ from typing import AsyncIterator
 
 import asyncpg
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.litellm import LiteLLMModel
+from pydantic_ai_litellm import LiteLLMModel
 
 INSTRUCTIONS = """You are a job search CRM assistant. Help the user manage their job search pipeline.
 
