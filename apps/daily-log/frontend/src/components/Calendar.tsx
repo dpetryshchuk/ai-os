@@ -1,29 +1,30 @@
-﻿import { useState, useEffect } from 'react'
-import { api } from '../lib/api'
+import { useState, useEffect } from 'react'
+import { api, type Habit, type CalendarDay } from '../lib/api'
 
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
-const MONTHS = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December'
-]
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
-function daysInMonth(year, month) {
+function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate()
 }
-
-function firstWeekday(year, month) {
+function firstWeekday(year: number, month: number): number {
   return new Date(year, month - 1, 1).getDay()
 }
-
-function pad(n) {
+function pad(n: number): string {
   return String(n).padStart(2, '0')
 }
 
-export default function Calendar({ selectedDate, onSelectDate, habits }) {
+interface CalendarProps {
+  selectedDate: string
+  onSelectDate: (date: string) => void
+  habits: Habit[]
+}
+
+export default function Calendar({ selectedDate, onSelectDate, habits }: CalendarProps) {
   const today = new Date()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth() + 1)
-  const [calData, setCalData] = useState([])
+  const [calData, setCalData] = useState<CalendarDay[]>([])
 
   useEffect(() => {
     api.calendar.get(year, month).then(d => setCalData(d.days)).catch(() => {})
@@ -36,7 +37,6 @@ export default function Calendar({ selectedDate, onSelectDate, habits }) {
     if (month === 1) { setYear(y => y - 1); setMonth(12) }
     else setMonth(m => m - 1)
   }
-
   function nextMonth() {
     if (month === 12) { setYear(y => y + 1); setMonth(1) }
     else setMonth(m => m + 1)
@@ -44,12 +44,10 @@ export default function Calendar({ selectedDate, onSelectDate, habits }) {
 
   const totalDays = daysInMonth(year, month)
   const startDay = firstWeekday(year, month)
-  const cells = []
-
+  const cells: (number | null)[] = []
   for (let i = 0; i < startDay; i++) cells.push(null)
   for (let d = 1; d <= totalDays; d++) cells.push(d)
 
-  // Weekly stats strip â€” current calendar week
   const todayStr = `${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`
   const weekStart = new Date(today)
   weekStart.setDate(today.getDate() - today.getDay())
@@ -59,43 +57,27 @@ export default function Calendar({ selectedDate, onSelectDate, habits }) {
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
   })
 
-  const weekStats = activeHabits.map(h => {
-    const count = weekDates.filter(date => {
+  const weekStats = activeHabits.map(h => ({
+    id: h.id,
+    name: h.name,
+    count: weekDates.filter(date => {
       const d = dayMap.get(date)
       if (!d) return false
       const v = d.habits[String(h.id)]
       return v === true || (typeof v === 'number' && v > 0)
-    }).length
-    return { id: h.id, name: h.name, count }
-  })
+    }).length,
+  }))
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Header */}
       <div className="flex items-center justify-between px-1">
-        <button
-          onClick={prevMonth}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground"
-        >
-          â€¹
-        </button>
+        <button onClick={prevMonth} className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground">‹</button>
         <span className="text-sm font-medium">{MONTHS[month-1]} {year}</span>
-        <button
-          onClick={nextMonth}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground"
-        >
-          â€º
-        </button>
+        <button onClick={nextMonth} className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground">›</button>
       </div>
-
-      {/* Day-of-week headers */}
       <div className="grid grid-cols-7 text-center">
-        {DAYS.map(d => (
-          <div key={d} className="text-[11px] text-muted-foreground py-1">{d}</div>
-        ))}
+        {DAYS.map(d => <div key={d} className="text-[11px] text-muted-foreground py-1">{d}</div>)}
       </div>
-
-      {/* Day cells */}
       <div className="grid grid-cols-7 gap-px">
         {cells.map((day, i) => {
           if (!day) return <div key={`empty-${i}`} />
@@ -103,16 +85,15 @@ export default function Calendar({ selectedDate, onSelectDate, habits }) {
           const data = dayMap.get(dateStr)
           const isToday = dateStr === todayStr
           const isSelected = dateStr === selectedDate
-
           return (
             <button
               key={dateStr}
               onClick={() => onSelectDate(dateStr)}
               className={[
-                'relative flex flex-col items-center py-1 rounded text-[12px] transition-colors',
+                'relative flex flex-col items-center py-1 rounded text-[12px] transition-colors duration-150',
                 isSelected ? 'bg-foreground text-primary-foreground' : 'hover:bg-muted',
                 isToday && !isSelected ? 'font-semibold' : '',
-                !data ? 'text-muted-foreground' : ''
+                !data ? 'text-muted-foreground' : '',
               ].join(' ')}
             >
               <span>{day}</span>
@@ -126,9 +107,7 @@ export default function Calendar({ selectedDate, onSelectDate, habits }) {
                         key={h.id}
                         className={[
                           'w-1 h-1 rounded-full',
-                          isSelected
-                            ? (done ? 'bg-white' : 'bg-white/40')
-                            : (done ? 'bg-foreground' : 'border border-border')
+                          isSelected ? (done ? 'bg-white' : 'bg-white/40') : (done ? 'bg-foreground' : 'border border-border'),
                         ].join(' ')}
                       />
                     )
@@ -139,8 +118,6 @@ export default function Calendar({ selectedDate, onSelectDate, habits }) {
           )
         })}
       </div>
-
-      {/* Weekly stats strip â€” only shown when viewing the current month */}
       {weekStats.length > 0 && year === today.getFullYear() && month === today.getMonth() + 1 && (
         <div className="border-t border-border pt-3 mt-1">
           <div className="text-[11px] text-muted-foreground mb-2">This week</div>
