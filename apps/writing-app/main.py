@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from freewrite import router as freewrite_router
 
 CONTENT_DIR = Path(os.environ.get("CONTENT_DIR", "/app/essays"))
 REPO_DIR = os.environ.get("REPO_DIR")
@@ -16,6 +17,7 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
+app.include_router(freewrite_router, prefix="/api/freewrite")
 
 
 @app.exception_handler(HTTPException)
