@@ -66,6 +66,7 @@ jobs:
       contents: read
       packages: write
     strategy:
+      fail-fast: false
       matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
