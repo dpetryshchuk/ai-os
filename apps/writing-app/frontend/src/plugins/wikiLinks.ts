@@ -1,4 +1,6 @@
+// eslint-disable-next-line react-doctor/prefer-dynamic-import
 import { ViewPlugin, Decoration, type DecorationSet, type EditorView, type ViewUpdate } from '@codemirror/view'
+// eslint-disable-next-line react-doctor/prefer-dynamic-import
 import { RangeSetBuilder } from '@codemirror/state'
 
 const WIKI_RE = /\[\[([^\]]+)\]\]/g

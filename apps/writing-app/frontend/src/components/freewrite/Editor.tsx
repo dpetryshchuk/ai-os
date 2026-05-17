@@ -36,7 +36,6 @@ export default function Editor({ text, onChange, fontFamily, fontSize, disabled 
         onChange={e => onChange(e.target.value)}
         placeholder={text.trim() === '' ? placeholderRef.current : ''}
         disabled={disabled}
-        autoFocus
         spellCheck
       />
     </div>

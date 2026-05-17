@@ -1,5 +1,5 @@
 import '@fontsource/lato'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useReducer, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { freewriteApi } from '../lib/freewrite-api'
 import { useEntries } from '../hooks/freewrite/useEntries'
@@ -9,34 +9,68 @@ import Editor from '../components/freewrite/Editor'
 import BottomNav from '../components/freewrite/BottomNav'
 import Sidebar from '../components/freewrite/Sidebar'
 
-export default function Freewrite() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(
-    () => (localStorage.getItem('freewrite_theme') as 'light' | 'dark') ?? 'light'
-  )
-  const [fontFamily, setFontFamily] = useState('Lato, sans-serif')
-  const [fontSize, setFontSize] = useState(20)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [text, setText] = useState('')
-  const [backspaceEnabled, setBackspaceEnabled] = useState(true)
-  const [navVisible, setNavVisible] = useState(true)
+type FreewriteState = {
+  theme: 'light' | 'dark'
+  fontFamily: string
+  fontSize: number
+  sidebarOpen: boolean
+  activeId: string | null
+  text: string
+  backspaceEnabled: boolean
+  navVisible: boolean
+}
 
-  const { entries, createEntry, deleteEntry, refresh } = useEntries()
+type FreewriteAction =
+  | { type: 'set_theme'; theme: 'light' | 'dark' }
+  | { type: 'set_font_family'; fontFamily: string }
+  | { type: 'set_font_size'; fontSize: number }
+  | { type: 'toggle_sidebar' }
+  | { type: 'set_entry'; id: string; text: string }
+  | { type: 'clear_entry' }
+  | { type: 'set_text'; text: string }
+  | { type: 'toggle_backspace' }
+  | { type: 'set_nav_visible'; visible: boolean }
+
+function freewriteReducer(state: FreewriteState, action: FreewriteAction): FreewriteState {
+  switch (action.type) {
+    case 'set_theme': return { ...state, theme: action.theme }
+    case 'set_font_family': return { ...state, fontFamily: action.fontFamily }
+    case 'set_font_size': return { ...state, fontSize: action.fontSize }
+    case 'toggle_sidebar': return { ...state, sidebarOpen: !state.sidebarOpen }
+    case 'set_entry': return { ...state, activeId: action.id, text: action.text }
+    case 'clear_entry': return { ...state, activeId: null, text: '' }
+    case 'set_text': return { ...state, text: action.text }
+    case 'toggle_backspace': return { ...state, backspaceEnabled: !state.backspaceEnabled }
+    case 'set_nav_visible': return { ...state, navVisible: action.visible }
+  }
+}
+
+export default function Freewrite() {
+  const [state, dispatch] = useReducer(freewriteReducer, undefined, () => ({
+    theme: (localStorage.getItem('freewrite_theme') as 'light' | 'dark') ?? 'light',
+    fontFamily: 'Lato, sans-serif',
+    fontSize: 20,
+    sidebarOpen: true,
+    activeId: null,
+    text: '',
+    backspaceEnabled: true,
+    navVisible: true,
+  }))
+  const { theme, fontFamily, fontSize, sidebarOpen, activeId, text, backspaceEnabled, navVisible } = state
+
+  const { entries, createEntry, deleteEntry } = useEntries()
   const timer = useTimer()
   useAutoSave(activeId, text)
 
-  // Apply theme to document
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     localStorage.setItem('freewrite_theme', theme)
   }, [theme])
 
-  // Hide nav when timer runs; re-show when it stops
   useEffect(() => {
-    setNavVisible(!timer.running)
+    dispatch({ type: 'set_nav_visible', visible: !timer.running })
   }, [timer.running])
 
-  // Backspace/Delete disable
   useEffect(() => {
     if (backspaceEnabled) return
     function block(e: KeyboardEvent) {
@@ -48,30 +82,26 @@ export default function Freewrite() {
 
   const hasAutoSelected = useRef(false)
 
-  // Auto-select first entry on first load only
   useEffect(() => {
     if (hasAutoSelected.current || entries.length === 0) return
     hasAutoSelected.current = true
     selectEntry(entries[0].id)
   }, [entries])
 
-  async function selectEntry(id: string) {
+  const selectEntry = useCallback(async (id: string) => {
     const t = await freewriteApi.entries.get(id)
-    setActiveId(id)
-    setText(t)
-  }
+    dispatch({ type: 'set_entry', id, text: t })
+  }, [])
 
   async function handleNewEntry() {
     const id = await createEntry()
-    setActiveId(id)
-    setText('\n\n')
+    dispatch({ type: 'set_entry', id, text: '\n\n' })
   }
 
   async function handleDelete(id: string) {
     await deleteEntry(id)
     if (activeId === id) {
-      setActiveId(null)
-      setText('')
+      dispatch({ type: 'clear_entry' })
     }
   }
 
@@ -104,7 +134,7 @@ export default function Freewrite() {
       <div className="flex-1 flex flex-col relative">
         {/* Sidebar toggle */}
         <button
-          onClick={() => setSidebarOpen(o => !o)}
+          onClick={() => dispatch({ type: 'toggle_sidebar' })}
           className="absolute top-4 left-4 text-xs text-muted-foreground hover:text-foreground transition-colors z-10"
         >
           {sidebarOpen ? '←' : '☰'}
@@ -112,15 +142,15 @@ export default function Freewrite() {
 
         <Editor
           text={text}
-          onChange={setText}
+          onChange={t => dispatch({ type: 'set_text', text: t })}
           fontFamily={fontFamily}
           fontSize={fontSize}
         />
 
         {/* Bottom nav with hover-to-reveal when timer running */}
         <div
-          onMouseEnter={() => setNavVisible(true)}
-          onMouseLeave={() => setNavVisible(!timer.running)}
+          onMouseEnter={() => dispatch({ type: 'set_nav_visible', visible: true })}
+          onMouseLeave={() => dispatch({ type: 'set_nav_visible', visible: !timer.running })}
         >
           <BottomNav
             timerDisplay={timer.display}
@@ -129,13 +159,13 @@ export default function Freewrite() {
             onTimerReset={timer.reset}
             onTimerAdjust={timer.adjustMinutes}
             backspaceEnabled={backspaceEnabled}
-            onToggleBackspace={() => setBackspaceEnabled(b => !b)}
+            onToggleBackspace={() => dispatch({ type: 'toggle_backspace' })}
             fontFamily={fontFamily}
             fontSize={fontSize}
-            onFontFamilyChange={setFontFamily}
-            onFontSizeChange={setFontSize}
+            onFontFamilyChange={ff => dispatch({ type: 'set_font_family', fontFamily: ff })}
+            onFontSizeChange={fs => dispatch({ type: 'set_font_size', fontSize: fs })}
             theme={theme}
-            onThemeToggle={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+            onThemeToggle={() => dispatch({ type: 'set_theme', theme: theme === 'dark' ? 'light' : 'dark' })}
             text={text}
             visible={navVisible}
           />

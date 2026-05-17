@@ -16,7 +16,7 @@ export default function Timer({ display, running, onToggle, onReset, onAdjustMin
     return () => { if (clickTimerRef.current) clearTimeout(clickTimerRef.current) }
   }, [])
 
-  function handleClick() {
+  function handleTimerPress() {
     clickCountRef.current += 1
     if (clickTimerRef.current) clearTimeout(clickTimerRef.current)
     clickTimerRef.current = setTimeout(() => {
@@ -33,7 +33,7 @@ export default function Timer({ display, running, onToggle, onReset, onAdjustMin
 
   return (
     <button
-      onClick={handleClick}
+      onClick={handleTimerPress}
       onWheel={handleWheel}
       className={`font-mono text-sm tabular-nums transition-opacity select-none cursor-pointer ${running ? 'opacity-100' : 'opacity-60 hover:opacity-100'}`}
     >

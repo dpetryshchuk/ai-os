@@ -48,7 +48,6 @@ export default function FrontmatterBar({ frontmatter, onChange }: FrontmatterBar
           ))}
           {addingTag ? (
             <input
-              autoFocus
               value={tagInput}
               onChange={e => setTagInput(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') addTag(); if (e.key === 'Escape') setAddingTag(false) }}

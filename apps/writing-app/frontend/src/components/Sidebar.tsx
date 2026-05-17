@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useReducer, useCallback } from 'react'
 import ContextMenu, { type ContextMenuItem } from './ContextMenu'
 import type { Essay } from '../lib/api'
 
@@ -34,24 +34,69 @@ interface Renaming {
   folder: string
 }
 
+type SidebarState = {
+  collapsed: Record<string, boolean>
+  contextMenu: ContextMenuState | null
+  inlineNew: InlineNew | null
+  newTitle: string
+  renaming: Renaming | null
+  renameValue: string
+  newFolderMode: boolean
+  newFolderName: string
+}
+
+type SidebarAction =
+  | { type: 'toggle_collapse'; folder: string }
+  | { type: 'set_context_menu'; menu: ContextMenuState | null }
+  | { type: 'set_inline_new'; folder: string | null; title?: string }
+  | { type: 'set_new_title'; title: string }
+  | { type: 'set_renaming'; folder: string | null; value?: string }
+  | { type: 'set_rename_value'; value: string }
+  | { type: 'set_new_folder_mode'; active: boolean; name?: string }
+  | { type: 'set_new_folder_name'; name: string }
+
+function sidebarReducer(state: SidebarState, action: SidebarAction): SidebarState {
+  switch (action.type) {
+    case 'toggle_collapse':
+      return { ...state, collapsed: { ...state.collapsed, [action.folder]: !state.collapsed[action.folder] } }
+    case 'set_context_menu':
+      return { ...state, contextMenu: action.menu }
+    case 'set_inline_new':
+      return { ...state, inlineNew: action.folder ? { folder: action.folder } : null, newTitle: action.title ?? '' }
+    case 'set_new_title':
+      return { ...state, newTitle: action.title }
+    case 'set_renaming':
+      return { ...state, renaming: action.folder ? { folder: action.folder } : null, renameValue: action.value ?? '' }
+    case 'set_rename_value':
+      return { ...state, renameValue: action.value }
+    case 'set_new_folder_mode':
+      return { ...state, newFolderMode: action.active, newFolderName: action.name ?? '' }
+    case 'set_new_folder_name':
+      return { ...state, newFolderName: action.name }
+  }
+}
+
 export default function Sidebar({
   folders, essays, activeFolder, activeSlug,
   onSelectEssay, onCreateEssay, onDeleteEssay, onMoveEssay,
   onCreateFolder, onRenameFolder, onDeleteFolder,
   onPull, commitMessage, onCommitMessageChange, onPush,
 }: SidebarProps) {
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
-  const [inlineNew, setInlineNew] = useState<InlineNew | null>(null)
-  const [newTitle, setNewTitle] = useState('')
-  const [renaming, setRenaming] = useState<Renaming | null>(null)
-  const [renameValue, setRenameValue] = useState('')
-  const [newFolderMode, setNewFolderMode] = useState(false)
-  const [newFolderName, setNewFolderName] = useState('')
+  const [state, dispatch] = useReducer(sidebarReducer, {
+    collapsed: {},
+    contextMenu: null,
+    inlineNew: null,
+    newTitle: '',
+    renaming: null,
+    renameValue: '',
+    newFolderMode: false,
+    newFolderName: '',
+  })
+  const { collapsed, contextMenu, inlineNew, newTitle, renaming, renameValue, newFolderMode, newFolderName } = state
 
   const openCtx = useCallback((e: React.MouseEvent, items: ContextMenuItem[]) => {
     e.preventDefault()
-    setContextMenu({ x: e.clientX, y: e.clientY, items })
+    dispatch({ type: 'set_context_menu', menu: { x: e.clientX, y: e.clientY, items } })
   }, [])
 
   function essaysInFolder(folder: string) {
@@ -60,8 +105,8 @@ export default function Sidebar({
 
   function handleFolderCtx(e: React.MouseEvent, folder: string) {
     openCtx(e, [
-      { label: 'New essay', action: () => { setInlineNew({ folder }); setNewTitle('') } },
-      { label: 'Rename', action: () => { setRenaming({ folder }); setRenameValue(folder) } },
+      { label: 'New essay', action: () => dispatch({ type: 'set_inline_new', folder, title: '' }) },
+      { label: 'Rename', action: () => dispatch({ type: 'set_renaming', folder, value: folder }) },
       {
         label: 'Delete', action: () => {
           if (essaysInFolder(folder).length > 0) return alert('Remove all essays first')
@@ -89,19 +134,17 @@ export default function Sidebar({
 
   function submitNewEssay(folder: string) {
     if (newTitle.trim()) onCreateEssay(folder, newTitle.trim())
-    setInlineNew(null)
-    setNewTitle('')
+    dispatch({ type: 'set_inline_new', folder: null })
   }
 
   function submitRename(oldName: string) {
     if (renameValue.trim() && renameValue !== oldName) onRenameFolder(oldName, renameValue.trim())
-    setRenaming(null)
+    dispatch({ type: 'set_renaming', folder: null })
   }
 
   function submitNewFolder() {
     if (newFolderName.trim()) onCreateFolder(newFolderName.trim())
-    setNewFolderMode(false)
-    setNewFolderName('')
+    dispatch({ type: 'set_new_folder_mode', active: false })
   }
 
   return (
@@ -110,18 +153,17 @@ export default function Sidebar({
         <span className="text-[10px] tracking-[0.1em] text-[#a8a29e] font-semibold uppercase">Essays</span>
         <div className="flex gap-2.5 items-center">
           <button onClick={onPull} title="Pull from GitHub" className="text-muted-foreground hover:text-[#78716c] text-sm leading-none transition-colors">↓</button>
-          <button onClick={() => { setNewFolderMode(true); setNewFolderName('') }} title="New folder" className="text-muted-foreground hover:text-[#78716c] text-base leading-none transition-colors">+</button>
+          <button onClick={() => dispatch({ type: 'set_new_folder_mode', active: true, name: '' })} title="New folder" className="text-muted-foreground hover:text-[#78716c] text-base leading-none transition-colors">+</button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto py-2">
         {newFolderMode && (
           <input
-            autoFocus
             value={newFolderName}
-            onChange={e => setNewFolderName(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') submitNewFolder(); if (e.key === 'Escape') setNewFolderMode(false) }}
-            onBlur={() => setNewFolderMode(false)}
+            onChange={e => dispatch({ type: 'set_new_folder_name', name: e.target.value })}
+            onKeyDown={e => { if (e.key === 'Enter') submitNewFolder(); if (e.key === 'Escape') dispatch({ type: 'set_new_folder_mode', active: false }) }}
+            onBlur={() => dispatch({ type: 'set_new_folder_mode', active: false })}
             placeholder="folder name"
             className="mx-3 mb-1 w-[calc(100%-24px)] bg-white border border-border rounded-md px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-[#a8a29e]"
           />
@@ -132,17 +174,19 @@ export default function Sidebar({
           return (
             <div key={folder}>
               <div
+                role="button"
+                tabIndex={0}
                 className="px-3 py-1.5 flex items-center gap-1.5 cursor-pointer group"
-                onClick={() => setCollapsed(c => ({ ...c, [folder]: !c[folder] }))}
+                onClick={() => dispatch({ type: 'toggle_collapse', folder })}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') dispatch({ type: 'toggle_collapse', folder }) }}
                 onContextMenu={e => handleFolderCtx(e, folder)}
               >
                 <span className="text-[9px] text-muted-foreground w-3 flex-shrink-0">{isOpen ? '▾' : '▸'}</span>
                 {renaming?.folder === folder ? (
                   <input
-                    autoFocus
                     value={renameValue}
-                    onChange={e => setRenameValue(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') submitRename(folder); if (e.key === 'Escape') setRenaming(null) }}
+                    onChange={e => dispatch({ type: 'set_rename_value', value: e.target.value })}
+                    onKeyDown={e => { if (e.key === 'Enter') submitRename(folder); if (e.key === 'Escape') dispatch({ type: 'set_renaming', folder: null }) }}
                     onBlur={() => submitRename(folder)}
                     onClick={e => e.stopPropagation()}
                     className="flex-1 bg-white border border-border rounded px-1.5 py-0.5 text-xs text-foreground outline-none"
@@ -151,7 +195,7 @@ export default function Sidebar({
                   <span className="text-xs text-[#736d65] group-hover:text-foreground flex-1 font-medium transition-colors">{folder}</span>
                 )}
                 <button
-                  onClick={e => { e.stopPropagation(); setInlineNew({ folder }); setNewTitle('') }}
+                  onClick={e => { e.stopPropagation(); dispatch({ type: 'set_inline_new', folder, title: '' }) }}
                   className="text-muted-foreground hover:text-[#78716c] text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
                 >+</button>
               </div>
@@ -160,12 +204,15 @@ export default function Sidebar({
                   {folderEssays.map(essay => (
                     <div
                       key={essay.slug}
+                      role="button"
+                      tabIndex={0}
                       className={`pl-7 pr-3 py-1.5 text-[12.5px] cursor-pointer transition-colors ${
                         activeFolder === essay.folder && activeSlug === essay.slug
                           ? 'text-foreground bg-white border-l-2 border-[#a8a29e] font-medium'
                           : 'text-[#9c9590] hover:text-foreground hover:bg-muted'
                       }`}
                       onClick={() => onSelectEssay(essay.folder, essay.slug)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onSelectEssay(essay.folder, essay.slug) }}
                       onContextMenu={e => handleEssayCtx(e, essay)}
                     >
                       {essay.title || essay.slug}
@@ -173,11 +220,10 @@ export default function Sidebar({
                   ))}
                   {inlineNew?.folder === folder && (
                     <input
-                      autoFocus
                       value={newTitle}
-                      onChange={e => setNewTitle(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') submitNewEssay(folder); if (e.key === 'Escape') setInlineNew(null) }}
-                      onBlur={() => setInlineNew(null)}
+                      onChange={e => dispatch({ type: 'set_new_title', title: e.target.value })}
+                      onKeyDown={e => { if (e.key === 'Enter') submitNewEssay(folder); if (e.key === 'Escape') dispatch({ type: 'set_inline_new', folder: null }) }}
+                      onBlur={() => dispatch({ type: 'set_inline_new', folder: null })}
                       placeholder="Essay title…"
                       className="ml-7 mr-3 my-0.5 w-[calc(100%-52px)] bg-white border border-border rounded px-2 py-1 text-xs text-foreground outline-none"
                     />
@@ -209,7 +255,7 @@ export default function Sidebar({
           x={contextMenu.x}
           y={contextMenu.y}
           items={contextMenu.items}
-          onClose={() => setContextMenu(null)}
+          onClose={() => dispatch({ type: 'set_context_menu', menu: null })}
         />
       )}
     </div>

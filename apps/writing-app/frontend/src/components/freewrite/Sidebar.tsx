@@ -26,7 +26,10 @@ export default function Sidebar({ entries, activeId, onSelect, onDelete }: Props
       {entries.map(entry => (
         <div
           key={entry.id}
+          role="button"
+          tabIndex={0}
           onClick={() => onSelect(entry.id)}
+          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onSelect(entry.id) }}
           className={`group relative px-4 py-3 cursor-pointer hover:bg-muted transition-colors border-b border-border ${activeId === entry.id ? 'bg-muted' : ''}`}
         >
           <div className="flex items-center gap-2 mb-0.5">
