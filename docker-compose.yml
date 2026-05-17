@@ -41,7 +41,7 @@ services:
     environment:
       PORT: "4111"
       DATABASE_URL: postgresql://jobsearch:${JOBSEARCH_DB_PASSWORD}@postgres:5432/jobsearch
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       UPLOADS_DIR: /app/uploads
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}

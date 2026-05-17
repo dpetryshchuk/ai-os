@@ -5,7 +5,6 @@ import shutil
 from contextlib import asynccontextmanager
 from typing import Any
 
-import anthropic
 import asyncpg
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,7 +15,6 @@ from agent import agentic_stream
 from db import close_pool, get_pool, init_pool
 
 UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "/home/dima/jobsearch/uploads")
-_anthropic = anthropic.AsyncAnthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
 
 @asynccontextmanager
@@ -70,7 +68,7 @@ async def agent_stream(body: dict, pool: asyncpg.Pool = Depends(get_pool)):
 
     async def generate():
         try:
-            async for chunk in agentic_stream(messages, pool, _anthropic):
+            async for chunk in agentic_stream(messages, pool):
                 yield chunk
         except Exception as e:
             import json as _json
