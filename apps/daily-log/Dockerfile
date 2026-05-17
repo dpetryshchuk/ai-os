@@ -1,30 +1,19 @@
 # Build context: repo root
-FROM node:22-alpine AS builder
+FROM node:22-alpine AS frontend-builder
 WORKDIR /app
 
 COPY packages/ui ./packages/ui
-
-COPY apps/daily-log/package.json apps/daily-log/package-lock.json ./apps/daily-log/
-RUN cd apps/daily-log && npm ci
-
 COPY apps/daily-log/frontend/package.json apps/daily-log/frontend/package-lock.json ./apps/daily-log/frontend/
 RUN cd apps/daily-log/frontend && npm ci
+COPY apps/daily-log/frontend ./apps/daily-log/frontend
+RUN cd apps/daily-log/frontend && npm run build
 
-COPY apps/daily-log ./apps/daily-log
-
-# Compile TypeScript backend → apps/daily-log/dist/
-RUN cd apps/daily-log && npx tsc -p tsconfig.json
-
-# Build Vite frontend and copy to ../public (build:frontend script does both)
-RUN cd apps/daily-log && npm run build:frontend
-
-# ── Runner ──
-FROM node:22-alpine AS runner
+FROM python:3.12-slim AS runner
 WORKDIR /app
-COPY apps/daily-log/package.json apps/daily-log/package-lock.json ./
-RUN npm ci --omit=dev
-COPY --from=builder /app/apps/daily-log/dist ./dist
-COPY --from=builder /app/apps/daily-log/public ./public
-ENV PORT=4113 NODE_ENV=production
+COPY apps/daily-log/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY apps/daily-log/main.py apps/daily-log/db.py ./
+COPY --from=frontend-builder /app/apps/daily-log/public ./public
+ENV PORT=4113
 EXPOSE 4113
-CMD ["node", "dist/server.js"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "4113"]
