@@ -5,8 +5,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev                      # mastra dev (hot reload on port 4111)
-npx mastra build                 # production build → .mastra/output/index.mjs
+uvicorn main:app --reload --port 4111   # dev server (hot reload)
+pytest                                   # run tests
+pytest -v                               # verbose test output
+
 npm run scrape:yc-deep           # YC deep scrape
 npm run scrape:hn                # HN Who's Hiring
 npm run scrape:remoteok          # RemoteOK public API
@@ -22,28 +24,41 @@ Local DB queries require an SSH tunnel: `ssh -L 5432:localhost:5432 dima@46.225.
 
 ```
 Browser → Caddy (jobsearch.dmytropetryshchuk.com, basicauth)
-              ├── /api/*  → Mastra server (localhost:4111)
-              └── static  → /home/dima/jobsearch/public/
+              → reverse_proxy localhost:4111
+                    → FastAPI (uvicorn main:app)
+                          ↕ asyncpg
+                        Postgres
 ```
 
-**One process.** Mastra is the sole backend — it hosts the agent, all API routes, and Postgres storage. No separate Express server.
+**One process.** FastAPI is the sole backend — it hosts the agent streaming endpoint, all API routes, and serves the React SPA.
 
-### Backend (`src/mastra/`)
+### Backend (`main.py` + `agent.py` + `db.py`)
 
 | File | Responsibility |
 |---|---|
-| `index.ts` | Mastra instance: agent, Postgres storage, Langfuse observability, all custom API routes |
-| `pool.ts` | Single shared `pg.Pool` (from `DATABASE_URL`) |
-| `queries.ts` | All read queries: `getPipeline`, `getRetro`, `getLeads`, `getApplications`, `getNotes`, `searchNotes`, `getContentPosts` |
-| `agents/jobsearch.ts` | CRM agent (DeepSeek model) — handles the 4 core flows |
-| `tools/db.ts` | Mastra tools: `upsert_company`, `upsert_contact`, `upsert_job_posting`, `update_stage`, `log_interaction`, `log_content_post`, `search_notes`, `query_db` |
+| `main.py` | Route definitions, lifespan (pool init/close), static file serving |
+| `agent.py` | Anthropic agentic loop (`claude-opus-4-7`) — 8 CRM tools, SSE streaming |
+| `db.py` | Singleton `asyncpg.Pool` — `init_pool()`, `close_pool()`, `get_pool()` dependency |
+
+### Agent
+
+`agent.py` implements a tool-use loop using the Anthropic Python SDK (`anthropic.AsyncAnthropic`). The `agentic_stream()` async generator yields SSE events:
+
+- `data: {"type": "text-delta", "text": "..."}` — streamed text chunks
+- `data: {"type": "tool-call", "name": "...", "input": {...}}` — tool being invoked
+- `data: {"type": "tool-result", "name": "...", "result": "..."}` — tool result
+- `data: [DONE]` — stream finished
+
+**8 CRM tools:** `upsert_company`, `upsert_contact`, `upsert_job_posting`, `update_stage`, `log_interaction`, `log_content_post`, `search_notes`, `query_db`
+
+Rule: `upsert_company` is always called first — tools search before inserting to avoid duplicates.
 
 ### API routes (all prefixed `/api/`)
 
-Agent chat (Mastra native):
+Agent chat:
 - `POST /api/agents/jobsearch/stream` — SSE streaming agent chat
 
-Data endpoints (custom routes in `index.ts`):
+Data endpoints:
 
 | Path | What |
 |---|---|
@@ -56,12 +71,13 @@ Data endpoints (custom routes in `index.ts`):
 | `POST /data/notes` | Create note (`category`, `title`, `url`, `content`) |
 | `PATCH /data/notes/:id` | Update note |
 | `DELETE /data/notes/:id` | Delete note |
-| `POST /data/resumes` | Upload PDF (multipart), stored in `/home/dima/jobsearch/uploads/` |
-| `GET /data/usage` | Langfuse traces + daily metrics |
+| `POST /data/resumes` | Upload PDF (multipart), stored in `UPLOADS_DIR` |
+| `GET /data/usage` | Placeholder usage stats |
+| `GET /health` | `{"ok": true}` |
 
 ### Database (Postgres 16)
 
-Schema in `docs/schema.sql`. Key tables:
+Schema in `db/schema.sql`. Key tables:
 
 ```
 companies       id, name, website
@@ -73,7 +89,7 @@ content_posts   id, posted_date, content, impressions, engagements, comments
 notes           id, category, title, url, content, created_at
 ```
 
-IDs are `lower(hex(randomblob(8)))` — 16-char hex strings.
+IDs are 16-char hex strings (`os.urandom(8).hex()`).
 
 ### Agent flows (4 core)
 
@@ -82,11 +98,9 @@ IDs are `lower(hex(randomblob(8)))` — 16-char hex strings.
 3. **Log outreach** → `upsert_company` → `upsert_contact(stage: Outreached)` → `log_interaction(out)`
 4. **Log a reply** → `query_db` to find contact → `update_stage` → `log_interaction(in)`
 
-Rule: always call `upsert_company` first — tools search before inserting, never create duplicates.
-
 ### Frontend (`frontend/`)
 
-React + Vite + Tailwind. Static output is built by GitHub Actions and served by Caddy from `public/` (file_server). Not served by the Mastra process.
+React + Vite + Tailwind. Built output goes to `public/` at project root (`outDir: '../public'`). Served by FastAPI.
 
 ### Scrapers (`tools/`)
 
@@ -98,6 +112,7 @@ Push to `master` → GitHub Actions builds Docker image → pushes to GHCR → S
 
 VPS path: `/home/dima/ai-os/` (monorepo, Docker Compose stack).
 Image: `ghcr.io/dpetryshchuk/ai-os/jobsearch:latest`
-Entry point: `node .mastra/output/index.mjs` (inside container)
+
+The Dockerfile uses `npm install` (not `npm ci`) for the frontend build step — the lock file has platform-specific packages that differ between macOS/Windows and Linux.
 
 Full VPS ops: see `../docs/VPS-GUIDE.md`

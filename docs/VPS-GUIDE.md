@@ -21,55 +21,30 @@ Everything needed to operate and extend the server.
 
 ## Installed software
 
-- **Node.js** — app runtime (`node`, `npm`)
-- **Caddy** — reverse proxy + automatic HTTPS (`/etc/caddy/Caddyfile`)
-- **systemd** — process management (`/etc/systemd/system/`)
-- **Postgres 16** — database server (used by jobsearch and daily-log)
+- **Docker + Docker Compose** — all services run as containers
+- **Caddy** — runs as a Docker container, reverse proxy + automatic HTTPS
+
+Everything else (Python, Node.js, Redis, Postgres) runs inside containers. Nothing is installed directly on the host.
 
 ---
 
-## Running apps
+## Running services
 
-| App | Port | Domain | Service | VPS path | GitHub |
-|---|---|---|---|---|---|
-| jobsearch CRM | 4111 | `jobsearch.dmytropetryshchuk.com` | `jobsearch` | `/home/dima/vps-apps/apps/jobsearch-vps` | `dpetryshchuk/vps-apps` |
-| writing app | 4112 | `write.dmytropetryshchuk.com` | `writing` | `/home/dima/vps-apps/apps/writing-app` | `dpetryshchuk/vps-apps` |
-| daily log | 4113 | `log.dmytropetryshchuk.com` | `daily-log` | `/home/dima/vps-apps/apps/daily-log-vps` | `dpetryshchuk/vps-apps` |
+| Service | Port (internal) | Domain |
+|---|---|---|
+| jobsearch | 4111 | `jobsearch.dmytropetryshchuk.com` |
+| writing-app | 4112 | `write.dmytropetryshchuk.com` |
+| daily-log | 4113 | `log.dmytropetryshchuk.com` |
+| home | 4114 | `home.dmytropetryshchuk.com` |
+| freewrite | 4115 | `freewrite.dmytropetryshchuk.com` |
+| postgres | 5432 (internal only) | — |
+| redis | 6379 (internal only) | — |
+| celery-worker | — | — |
+| celery-beat | — | — |
 
-**Next available port:** 4114
+**Next available port:** 4116
 
----
-
-## Full Caddyfile (`/etc/caddy/Caddyfile`)
-
-```caddy
-jobsearch.dmytropetryshchuk.com {
-  basic_auth {
-    dima <bcrypt-hash>
-  }
-  handle /api/* {
-    reverse_proxy localhost:4111
-  }
-  handle {
-    root * /home/dima/jobsearch/public
-    file_server
-  }
-}
-
-write.dmytropetryshchuk.com {
-  basic_auth {
-    dima <bcrypt-hash>
-  }
-  reverse_proxy localhost:4112
-}
-
-log.dmytropetryshchuk.com {
-  basic_auth {
-    dima <bcrypt-hash>
-  }
-  reverse_proxy localhost:4113
-}
-```
+All containers are on the `internal` bridge network. Only Caddy exposes ports 80/443 to the host.
 
 ---
 
@@ -79,189 +54,160 @@ log.dmytropetryshchuk.com {
 # SSH in
 ssh dima@46.225.78.10
 
+# View running containers
+docker compose ps
+
 # Tail logs for a service
-journalctl -u <service-name> -f
+docker compose logs -f <service>
 
 # Restart a service
-sudo systemctl restart <service-name>
+docker compose restart <service>
 
-# Reload Caddy after config changes
-sudo systemctl reload caddy
+# Pull latest image and restart
+docker compose pull <service> && docker compose up -d <service>
 
-# Check Caddy config syntax
-caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+# Bring everything up (after infra changes)
+docker compose up -d --remove-orphans
 
-# View all running services
-systemctl list-units --type=service --state=running
+# Reload Caddy after Caddyfile change
+sudo systemctl reload-or-restart caddy
+```
+
+---
+
+## Caddyfile
+
+Location in repo: `caddy/Caddyfile`. On the VPS it's bind-mounted into the Caddy container.
+
+Auth credentials are stored in `caddy/auth_credentials` on the VPS (not committed to git). Format: one `username <bcrypt-hash>` per line.
+
+Generate a bcrypt hash:
+```bash
+caddy hash-password --plaintext yourpassword
+```
+
+The `(auth)` snippet is imported by every vhost:
+
+```caddy
+(auth) {
+  basic_auth {
+    import /home/dima/ai-os/caddy/auth_credentials
+  }
+}
+
+home.dmytropetryshchuk.com {
+  import auth
+  reverse_proxy localhost:4114
+}
+# ... etc
+```
+
+---
+
+## Postgres
+
+Managed by Docker Compose. Init script: `postgres/init.sh` — creates users and databases on first boot.
+
+Current databases: `daily_log`, `jobsearch`, `home`
+
+Passwords set via environment variables in `.env` on the VPS:
+- `POSTGRES_PASSWORD` — superuser password
+- `DAILY_LOG_DB_PASSWORD`
+- `JOBSEARCH_DB_PASSWORD`
+
+To query locally, open an SSH tunnel:
+```bash
+ssh -L 5432:localhost:5432 dima@46.225.78.10
 ```
 
 ---
 
 ## Adding a new app — checklist
 
-### 1. Clone the repo on the VPS
+### 1. Create `apps/<name>/` in the monorepo
 
-```bash
-ssh dima@46.225.78.10
-cd /home/dima
-git clone https://github.com/dpetryshchuk/<repo-name>.git <app-name>
-cd <app-name>
-npm install
+Follow the existing pattern:
+- `main.py` — FastAPI backend
+- `db.py` — asyncpg pool (if using Postgres)
+- `requirements.txt` — Python dependencies
+- `Dockerfile` — multistage: `node:22-alpine` (frontend build) + `python:3.12-slim` (runner)
+- `frontend/` — React + Vite + Tailwind
+
+Use `outDir: '../public'` in `vite.config.ts` so the frontend build lands at `apps/<name>/public/`, which the Dockerfile copies.
+
+### 2. Add to `docker-compose.yml`
+
+```yaml
+  <name>:
+    image: ghcr.io/dpetryshchuk/ai-os/<name>:latest
+    ports:
+      - "127.0.0.1:<port>:<port>"
+    environment:
+      PORT: "<port>"
+      DATABASE_URL: postgresql://<name>:${<NAME>_DB_PASSWORD}@postgres:5432/<name>
+    depends_on:
+      - postgres
+    networks:
+      - internal
+    restart: unless-stopped
 ```
 
-Create `.env`:
-```bash
-nano .env
-# PORT=4114
-# DATABASE_URL=...  (if needed)
-```
-
-### 2. Build
-
-```bash
-npm run build   # tsc + frontend build
-```
-
-### 3. Create the systemd service
-
-```bash
-sudo nano /etc/systemd/system/<app-name>.service
-```
-
-```ini
-[Unit]
-Description=<App Display Name>
-After=network.target
-
-[Service]
-Type=simple
-User=dima
-WorkingDirectory=/home/dima/<app-name>
-EnvironmentFile=/home/dima/<app-name>/.env
-ExecStart=/usr/bin/node /home/dima/<app-name>/dist/server.js
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable <app-name>
-sudo systemctl start <app-name>
-sudo systemctl status <app-name>
-```
-
-### 4. Add a Caddy vhost
-
-```bash
-sudo nano /etc/caddy/Caddyfile
-```
+### 3. Add to `caddy/Caddyfile`
 
 ```caddy
 <subdomain>.dmytropetryshchuk.com {
-  basic_auth {
-    dima <bcrypt-hash>
-  }
+  import auth
   reverse_proxy localhost:<port>
 }
 ```
 
-Generate the bcrypt hash (write it with `nano` — never embed in a shell heredoc, `$` gets expanded):
+### 4. Add Postgres DB (if needed)
+
+In `postgres/init.sh`:
 ```bash
-caddy hash-password --plaintext yourpassword
+CREATE USER <name> WITH PASSWORD '${<NAME>_DB_PASSWORD}';
+CREATE DATABASE <name> OWNER <name>;
 ```
 
-Validate and reload:
-```bash
-caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-sudo systemctl reload caddy
-```
+Add `<NAME>_DB_PASSWORD` to `.env` on the VPS and to the `postgres` service's `environment` block in `docker-compose.yml`.
 
-### 5. Add DNS record on Porkbun
+### 5. Add to GitHub Actions deploy matrix
+
+In `.github/workflows/deploy.yml`, add the app to:
+- `detect` job's `paths-filter` (both push and workflow_dispatch branches)
+- `set-matrix` job's `includes` array
+
+### 6. Add DNS record on Porkbun
 
 1. porkbun.com → DNS → `dmytropetryshchuk.com`
 2. Add **A record**: Host = `<subdomain>`, Answer = `46.225.78.10`, TTL = 600
 3. Wait ~2 minutes — Caddy fetches the TLS cert automatically once DNS resolves
 
-### 6. Set up GitHub Actions auto-deploy
+### 7. Set up VPS env vars
 
-`.github/workflows/deploy.yml`:
-
-```yaml
-name: Deploy
-
-on:
-  push:
-    branches: [master]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to VPS
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script: |
-            set -e
-            cd /home/dima/<app-name>
-            git fetch origin master
-            git reset --hard origin/master
-            npm install
-            npm run build
-            sudo systemctl restart <app-name>
-```
-
-Add secrets in GitHub → repo → Settings → Secrets → Actions:
-
-| Secret | Value |
-|---|---|
-| `VPS_HOST` | `46.225.78.10` |
-| `VPS_USER` | `dima` |
-| `VPS_SSH_KEY` | Private key (generate a dedicated keypair — see below) |
-
-### 7. Generate SSH keypairs
-
-Two keys are needed per app:
-
-**GitHub → VPS** (allows Actions to SSH in):
+SSH in and add to `/home/dima/ai-os/.env`:
 ```bash
-# On local machine or VPS:
-ssh-keygen -t ed25519 -C "github-actions-<app-name>" -f ~/.ssh/<app-name>_deploy -N ""
-cat ~/.ssh/<app-name>_deploy.pub >> ~/.ssh/authorized_keys   # on VPS
-cat ~/.ssh/<app-name>_deploy   # copy this as VPS_SSH_KEY secret
+<NAME>_DB_PASSWORD=<password>
 ```
 
-Set secrets via CLI:
+Then:
 ```bash
-gh secret set VPS_HOST --repo dpetryshchuk/<repo> --body "46.225.78.10"
-gh secret set VPS_USER --repo dpetryshchuk/<repo> --body "dima"
-gh secret set VPS_SSH_KEY --repo dpetryshchuk/<repo> < ~/.ssh/<app-name>_deploy
+docker compose up -d postgres   # re-run init if DB doesn't exist yet
+docker compose up -d <name>
 ```
 
-**VPS → GitHub** (allows the VPS to `git fetch` from private repos):
-```bash
-# On VPS:
-ssh-keygen -t ed25519 -C "vps-<app-name>-github" -f ~/.ssh/id_<app-name>_github -N ""
-cat ~/.ssh/id_<app-name>_github.pub   # add as Deploy Key in GitHub repo Settings
-```
+---
 
-`~/.ssh/config` on VPS:
-```
-Host github-<app-name>
-  HostName github.com
-  User git
-  IdentityFile ~/.ssh/id_<app-name>_github
-  IdentitiesOnly yes
-```
+## Deploy flow (GitHub Actions)
 
-```bash
-git remote set-url origin git@github-<app-name>:dpetryshchuk/<repo>.git
-```
+`.github/workflows/deploy.yml` runs on every push to `master` and on `workflow_dispatch` (manual trigger deploys all apps).
+
+1. **detect** — `dorny/paths-filter@v3` determines which apps changed; `workflow_dispatch` always outputs `true` for all
+2. **set-matrix** — builds the deploy matrix from detect outputs
+3. **deploy-app** — for each changed app: `docker build + push` → SSH → `docker compose pull <app> && docker compose up -d <app>`
+4. **deploy-infra** — when `docker-compose.yml` or `caddy/` changes: `docker compose up -d --remove-orphans` + `sudo systemctl reload-or-restart caddy`
+
+All matrix jobs run with `fail-fast: false` — one app failing doesn't cancel the others.
 
 ---
 
@@ -272,41 +218,30 @@ git remote set-url origin git@github-<app-name>:dpetryshchuk/<repo>.git
 | 4111 | jobsearch |
 | 4112 | writing-app |
 | 4113 | daily-log |
-| 4114 | next available |
+| 4114 | home |
+| 4115 | freewrite |
 
 ---
 
 ## Gotchas
 
-**`git pull` fails after `npm install` modifies `package-lock.json`.**
-Use `git fetch origin master && git reset --hard origin/master` in deploy scripts instead of `git pull`.
+**`git pull` fails after npm installs modify the lock file.**
+Deploy scripts use `git fetch origin master && git reset --hard origin/master` instead of `git pull`.
+
+**`systemctl reload caddy` fails if Caddy is stopped.**
+Use `sudo systemctl reload-or-restart caddy` — handles both running and stopped states.
 
 **Bcrypt hashes with `$` get mangled in shell scripts.**
-`$2a$14$...` contains `$2`, `$14` which bash expands as variables. Always write the Caddyfile with `nano`. Validate before every reload.
+`$2a$14$...` contains `$2`, `$14` which bash expands as variables. Always write the credentials file with `nano`. Never embed in heredocs or shell commands.
 
-**Failed Caddy reload → stuck in timeout loop.**
-If `systemctl reload caddy` errors, Caddy enters a reload-timeout loop. Fix the config and use `systemctl restart caddy` (full restart) to break out.
+**`npm ci` fails for apps with Windows-generated lock files.**
+Some npm packages (e.g. `@emnapi`) have platform-specific optional deps. Lock files generated on Windows/macOS are missing Linux variants. Use `npm install` in Dockerfiles instead of `npm ci`.
 
-**`basicauth` vs `basic_auth`.**
-`basicauth` (no underscore) is deprecated in newer Caddy — use `basic_auth`. Both work but the old form prints a warning on every reload.
+**Vite `outDir` must be `'../public'`.**
+The Dockerfile copies from `apps/<name>/public/` (relative to repo root). If `outDir` is `'dist'` or anything else, the Docker build fails with "path not found".
 
-**`__dirname` in compiled TypeScript points to `dist/`.**
-Static files at `public/` must be referenced as `path.join(__dirname, '..', 'public')`, not `path.join(__dirname, 'public')`.
+**GitHub Actions `workflow_dispatch` + `dorny/paths-filter`.**
+`paths-filter` requires a push event diff context — it errors on `workflow_dispatch`. The detect job conditionally skips it and outputs `true` for all apps on manual runs.
 
-**Two SSH keys per app.**
-One key pair for GitHub Actions → VPS. A separate key pair for VPS → GitHub (to fetch from private repos). Don't reuse the same key for both directions.
-
----
-
-## Node.js version check
-
-```bash
-node --version   # should be v18+
-npm --version
-```
-
-Upgrade if needed:
-```bash
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-```
+**Two SSH keys per deployment direction.**
+GitHub Actions → VPS uses one keypair. VPS → GitHub (for `git fetch`) uses a separate keypair. Don't reuse the same key for both directions.

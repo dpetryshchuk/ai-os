@@ -5,39 +5,35 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev          # ts-node-dev on server.ts (port 4113)
-npm run build        # tsc → dist/, then frontend build → public/
-npm test             # vitest run (requires DATABASE_URL or falls back to daily_log_test)
-npm run test:watch   # vitest in watch mode
+uvicorn main:app --reload --port 4113   # dev server (hot reload)
+pytest                                   # run tests
+pytest -v                               # verbose test output
 
-cd frontend && npm run dev   # Vite dev server for frontend only
+cd frontend && npm run dev              # Vite dev server for frontend only
 ```
 
-Tests hit a real Postgres database (`daily_log_test` by default). The pool is shared via `src/db.ts` — tests pass an optional `pool` param to avoid global state leaks.
+Tests use a mock asyncpg pool via `app.dependency_overrides[get_pool]` — no real database needed.
 
 ## Architecture
 
 ```
 Browser → Caddy (log.dmytropetryshchuk.com)
               → reverse_proxy localhost:4113
-                    → Express (dist/server.js)
-                          ↕ pg
+                    → FastAPI (uvicorn main:app)
+                          ↕ asyncpg
                         Postgres
 ```
 
-**No build-time data fetching.** The Express server is the only backend — it serves the React SPA from `public/` and exposes the API.
+**No build-time data fetching.** FastAPI serves the React SPA from `public/` and exposes the API.
 
-### Backend (`server.ts` + `src/`)
+### Backend (`main.py` + `db.py`)
 
 | File | Responsibility |
 |---|---|
-| `server.ts` | Route definitions + static file serving |
-| `src/db.ts` | Singleton `Pool` (lazy init from `DATABASE_URL`) |
-| `src/entries.ts` | `entries` table — daily journal text |
-| `src/habits.ts` | `habit_types` + `habit_logs` tables |
-| `src/calendar.ts` | Calendar view aggregation query |
+| `main.py` | Route definitions, lifespan (pool init/close), static file serving |
+| `db.py` | Singleton `asyncpg.Pool` — `init_pool()`, `close_pool()`, `get_pool()` FastAPI dependency |
 
-All module functions accept an optional `pool` parameter for test injection.
+All routes accept the pool via `Depends(get_pool)` for test injection.
 
 ### Database (Postgres)
 
@@ -47,7 +43,7 @@ Schema in `schema.sql`. Three tables:
 - `habit_types` — named habit definitions with `kind: 'boolean' | 'number'`
 - `habit_logs` — (habit_type_id, date) composite PK, `value` stored as jsonb
 
-`DATABASE_URL` in `.env` (local) or `EnvironmentFile` on VPS.
+`DATABASE_URL` in `.env` (local) or Docker Compose `environment` on VPS.
 
 ### API
 
@@ -60,10 +56,11 @@ Schema in `schema.sql`. Three tables:
 | `GET` | `/api/habits` | All habit type definitions |
 | `POST` | `/api/habits` | Create a habit type |
 | `PATCH` | `/api/habits/:id` | Update name or active status |
+| `GET` | `/api/health` | `{"ok": true}` |
 
 ### Frontend (`frontend/`)
 
-React + Vite + Tailwind. Built output is copied to `public/` at project root by the `build` script. Uses Geist variable font (`@fontsource-variable/geist`). SPA with client-side routing — server catches all `GET *` and returns `index.html`.
+React + Vite + Tailwind. Built output goes to `public/` at project root (`outDir: '../public'` in `vite.config.ts`). Uses Geist variable font. SPA with client-side routing — FastAPI serves `index.html` for all non-API GET requests.
 
 ## Deploy
 
