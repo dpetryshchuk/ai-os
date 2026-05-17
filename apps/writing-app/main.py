@@ -188,11 +188,22 @@ def delete_folder(folder: str):
 
 # ── Git ───────────────────────────────────────────────────────────────────────
 
+def _remote_url() -> str:
+    token = os.environ.get("GITHUB_TOKEN", "")
+    repo = os.environ.get("GITHUB_REPO", "")  # "owner/repo"
+    if not token or not repo:
+        raise HTTPException(500, "GITHUB_TOKEN and GITHUB_REPO env vars are required")
+    return f"https://x-access-token:{token}@github.com/{repo}.git"
+
+
 @app.post("/api/git/pull")
 def git_pull():
     try:
+        remote = _remote_url()
+        subprocess.run(["git", "fetch", remote], cwd=REPO_DIR, capture_output=True, text=True, check=True)
         result = subprocess.run(
-            ["git", "pull"], cwd=REPO_DIR, capture_output=True, text=True, check=True
+            ["git", "reset", "--hard", "FETCH_HEAD"],
+            cwd=REPO_DIR, capture_output=True, text=True, check=True
         )
         return {"ok": True, "output": result.stdout.strip()}
     except subprocess.CalledProcessError as e:
@@ -203,6 +214,7 @@ def git_pull():
 def git_push(body: dict):
     message = body.get("message") or "update essays"
     try:
+        remote = _remote_url()
         subprocess.run(["git", "add", "-A"], cwd=REPO_DIR, capture_output=True, text=True, check=True)
         commit = subprocess.run(
             ["git", "commit", "-m", message], cwd=REPO_DIR, capture_output=True, text=True
@@ -213,7 +225,8 @@ def git_push(body: dict):
         if commit.returncode != 0 and not nothing_to_commit:
             raise HTTPException(400, commit.stderr.strip() or commit.stdout.strip() or "git commit failed")
         result = subprocess.run(
-            ["git", "push"], cwd=REPO_DIR, capture_output=True, text=True, check=True
+            ["git", "push", remote, "HEAD:master"],
+            cwd=REPO_DIR, capture_output=True, text=True, check=True
         )
         return {"ok": True, "output": result.stdout.strip() or commit.stdout.strip()}
     except subprocess.CalledProcessError as e:
