@@ -1,4 +1,4 @@
-type SaveStatusKind = 'idle' | 'saving' | 'saved' | 'error'
+export type SaveStatusKind = 'idle' | 'saving' | 'saved' | 'error'
 
 export default function SaveStatus({ status }: { status: SaveStatusKind }) {
   const label: Record<SaveStatusKind, string> = {
@@ -14,5 +14,3 @@ export default function SaveStatus({ status }: { status: SaveStatusKind }) {
     </div>
   )
 }
-
-export type { SaveStatusKind }

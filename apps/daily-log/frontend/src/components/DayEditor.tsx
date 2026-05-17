@@ -62,14 +62,14 @@ export default function DayEditor({ date, habits }: DayEditorProps) {
   }
 
   function handleJournalChange(field: keyof EntryState, value: string) {
-    const updated = { ...entry!, [field]: value }
+    const updated = { ...(entry ?? { did_today: '', doing_tomorrow: '' }), [field]: value }
     setEntry(updated)
     scheduleSave(updated, habitValues, 800)
   }
 
   function handleJournalBlur(field: keyof EntryState, value: string) {
     if (saveTimer.current) clearTimeout(saveTimer.current)
-    const updated = { ...entry!, [field]: value }
+    const updated = { ...(entry ?? { did_today: '', doing_tomorrow: '' }), [field]: value }
     setEntry(updated)
     setSaveStatus('saving')
     api.day.save(date, {
