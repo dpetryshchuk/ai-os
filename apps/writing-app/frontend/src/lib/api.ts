@@ -14,6 +14,8 @@ export interface Frontmatter {
   tags?: string[]
   status?: string
   date?: string
+  description?: string
+  toc?: boolean
   [key: string]: unknown
 }
 

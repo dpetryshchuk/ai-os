@@ -203,14 +203,21 @@ def git_pull():
 def git_push(body: dict):
     message = body.get("message") or "update essays"
     try:
-        subprocess.run(["git", "add", "-A"], cwd=REPO_DIR, check=True)
-        subprocess.run(["git", "commit", "-m", message], cwd=REPO_DIR, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=REPO_DIR, capture_output=True, text=True, check=True)
+        commit = subprocess.run(
+            ["git", "commit", "-m", message], cwd=REPO_DIR, capture_output=True, text=True
+        )
+        nothing_to_commit = commit.returncode != 0 and (
+            "nothing to commit" in commit.stdout or "nothing to commit" in commit.stderr
+        )
+        if commit.returncode != 0 and not nothing_to_commit:
+            raise HTTPException(400, commit.stderr.strip() or commit.stdout.strip() or "git commit failed")
         result = subprocess.run(
             ["git", "push"], cwd=REPO_DIR, capture_output=True, text=True, check=True
         )
-        return {"ok": True, "output": result.stdout.strip()}
+        return {"ok": True, "output": result.stdout.strip() or commit.stdout.strip()}
     except subprocess.CalledProcessError as e:
-        raise HTTPException(400, e.stderr or "git operation failed")
+        raise HTTPException(400, e.stderr.strip() or e.stdout.strip() or "git push failed")
 
 
 # ── Static (SPA fallback — must be last) ─────────────────────────────────────
