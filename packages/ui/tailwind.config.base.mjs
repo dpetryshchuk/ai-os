@@ -4,6 +4,9 @@ export function createConfig({ content, extend = {} }) {
     content,
     theme: {
       extend: {
+        ringWidth: {
+          3: '3px',
+        },
         fontFamily: {
           sans: ['Geist Variable', 'Geist', 'system-ui', 'sans-serif'],
           mono: ['Geist Mono Variable', 'Geist Mono', 'ui-monospace', 'monospace'],
