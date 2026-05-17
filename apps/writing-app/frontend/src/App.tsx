@@ -4,7 +4,7 @@ import { api, type Essay, type EssayData, type Frontmatter } from './lib/api'
 import Sidebar from './components/Sidebar'
 import FrontmatterBar from './components/FrontmatterBar'
 import Editor from './components/Editor'
-import FreewirtePage from './pages/Freewrite'
+import FreewritePage from './pages/Freewrite'
 
 export default function App() {
   const [folders, setFolders] = useState<string[]>([])
@@ -99,7 +99,7 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/freewrite" element={<FreewirtePage />} />
+      <Route path="/freewrite" element={<FreewritePage />} />
       <Route path="/*" element={
         <div className="flex h-screen overflow-hidden">
           <Sidebar
