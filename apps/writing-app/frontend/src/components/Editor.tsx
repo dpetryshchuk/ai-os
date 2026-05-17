@@ -4,6 +4,7 @@ import { markdown } from '@codemirror/lang-markdown'
 import { marked } from 'marked'
 import { api, type Essay, type Frontmatter } from '../lib/api'
 import { wikiLinksExtension } from '../plugins/wikiLinks'
+import { harperLinter } from '../lib/harperLinter'
 
 type SaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
 type ViewMode = 'edit' | 'split' | 'preview'
@@ -86,6 +87,7 @@ export default function Editor({ folder, slug, initialBody, frontmatterRef, body
         markdown(),
         EditorView.lineWrapping,
         wikiLinksExtension(),
+        harperLinter,
         EditorView.updateListener.of((update) => {
           if (!update.docChanged) return
           const value = update.state.doc.toString()
