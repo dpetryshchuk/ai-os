@@ -302,11 +302,11 @@ async def agentic_stream(
                 tool_input = block.input
                 tool_id = block.id
 
-                yield f"data: {json.dumps({'type': 'tool-call', 'payload': {'name': tool_name, 'input': tool_input}})}\n\n"
+                yield f"data: {json.dumps({'type': 'tool-call', 'payload': {'toolCallId': tool_id, 'toolName': tool_name, 'args': tool_input}})}\n\n"
 
                 result = await run_tool(tool_name, tool_input, pool)
 
-                yield f"data: {json.dumps({'type': 'tool-result', 'payload': {'name': tool_name, 'result': result}})}\n\n"
+                yield f"data: {json.dumps({'type': 'tool-result', 'payload': {'toolCallId': tool_id, 'toolName': tool_name, 'result': result}})}\n\n"
 
                 tool_results.append({
                     "type": "tool_result",

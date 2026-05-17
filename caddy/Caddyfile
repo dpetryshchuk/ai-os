@@ -1,3 +1,9 @@
+{
+	servers {
+		protocols h1 h2
+	}
+}
+
 (auth) {
   basic_auth {
     import /home/dima/ai-os/caddy/auth_credentials
@@ -6,20 +12,28 @@
 
 home.dmytropetryshchuk.com {
   import auth
-  reverse_proxy localhost:4114
+  reverse_proxy localhost:4114 {
+    flush_interval -1
+  }
 }
 
 jobsearch.dmytropetryshchuk.com {
   import auth
-  reverse_proxy localhost:4111
+  reverse_proxy localhost:4111 {
+    flush_interval -1
+  }
 }
 
 write.dmytropetryshchuk.com {
   import auth
-  reverse_proxy localhost:4112
+  reverse_proxy localhost:4112 {
+    flush_interval -1
+  }
 }
 
 log.dmytropetryshchuk.com {
   import auth
-  reverse_proxy localhost:4113
+  reverse_proxy localhost:4113 {
+    flush_interval -1
+  }
 }
