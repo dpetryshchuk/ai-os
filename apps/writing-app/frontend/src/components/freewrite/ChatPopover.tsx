@@ -23,12 +23,12 @@ export default function ChatPopover({ text, onClose }: Props) {
   const tooShort = text.replace(/\s/g, '').length < 350
 
   function openChatGPT() {
-    window.open(`https://chat.openai.com/?prompt=${encodeURIComponent(CHATGPT_PROMPT + '\n\n' + text)}`, '_blank')
+    window.open(`https://chat.openai.com/?prompt=${encodeURIComponent(CHATGPT_PROMPT + '\n\n' + text)}`, '_blank', 'noopener,noreferrer')
     onClose()
   }
 
   function openClaude() {
-    window.open(`https://claude.ai/new?q=${encodeURIComponent(CLAUDE_PROMPT + '\n\n' + text)}`, '_blank')
+    window.open(`https://claude.ai/new?q=${encodeURIComponent(CLAUDE_PROMPT + '\n\n' + text)}`, '_blank', 'noopener,noreferrer')
     onClose()
   }
 

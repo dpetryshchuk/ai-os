@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useEffect } from 'react'
 
 interface Props {
   display: string
@@ -11,6 +11,10 @@ interface Props {
 export default function Timer({ display, running, onToggle, onReset, onAdjustMinutes }: Props) {
   const clickCountRef = useRef(0)
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => { if (clickTimerRef.current) clearTimeout(clickTimerRef.current) }
+  }, [])
 
   function handleClick() {
     clickCountRef.current += 1

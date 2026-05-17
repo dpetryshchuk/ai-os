@@ -32,12 +32,12 @@ export default function BottomNav({
   const [chatOpen, setChatOpen] = useState(false)
 
   function cycleFont() {
-    const idx = FONTS.indexOf(fontFamily)
+    const idx = Math.max(0, FONTS.indexOf(fontFamily))
     onFontFamilyChange(FONTS[(idx + 1) % FONTS.length])
   }
 
   function cycleSize() {
-    const idx = FONT_SIZES.indexOf(fontSize)
+    const idx = Math.max(0, FONT_SIZES.indexOf(fontSize))
     onFontSizeChange(FONT_SIZES[(idx + 1) % FONT_SIZES.length])
   }
 
