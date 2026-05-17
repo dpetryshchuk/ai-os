@@ -1,11 +1,23 @@
 import { useEffect, useRef } from 'react'
 
-export default function ContextMenu({ x, y, items, onClose }) {
-  const ref = useRef()
+interface ContextMenuItem {
+  label: string
+  action: () => void
+}
+
+interface ContextMenuProps {
+  x: number
+  y: number
+  items: ContextMenuItem[]
+  onClose: () => void
+}
+
+export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
+  const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) onClose()
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -21,7 +33,7 @@ export default function ContextMenu({ x, y, items, onClose }) {
         <button
           key={item.label}
           onClick={() => { item.action(); onClose() }}
-          className="block w-full text-left px-3 py-1.5 text-[12.5px] text-[#44403c] hover:bg-[#f7f6f3] transition-colors"
+          className="block w-full text-left px-3 py-1.5 text-[12.5px] text-[#44403c] hover:bg-[#f7f6f3] transition-colors duration-150"
         >
           {item.label}
         </button>
@@ -29,3 +41,5 @@ export default function ContextMenu({ x, y, items, onClose }) {
     </div>
   )
 }
+
+export type { ContextMenuItem }

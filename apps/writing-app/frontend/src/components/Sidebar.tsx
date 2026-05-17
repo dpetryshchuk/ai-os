@@ -1,42 +1,64 @@
 import { useState, useCallback } from 'react'
-import ContextMenu from './ContextMenu'
+import ContextMenu, { type ContextMenuItem } from './ContextMenu'
+import type { Essay } from '../lib/api'
+
+interface SidebarProps {
+  folders: string[]
+  essays: Essay[]
+  activeFolder: string | null
+  activeSlug: string | null
+  onSelectEssay: (folder: string, slug: string) => void
+  onCreateEssay: (folder: string, title: string) => void
+  onDeleteEssay: (folder: string, slug: string) => void
+  onMoveEssay: (folder: string, slug: string, targetFolder: string) => void
+  onCreateFolder: (name: string) => void
+  onRenameFolder: (oldName: string, newName: string) => void
+  onDeleteFolder: (name: string) => void
+  onPull: () => void
+  commitMessage: string
+  onCommitMessageChange: (msg: string) => void
+  onPush: () => void
+}
+
+interface ContextMenuState {
+  x: number
+  y: number
+  items: ContextMenuItem[]
+}
+
+interface InlineNew {
+  folder: string
+}
+
+interface Renaming {
+  folder: string
+}
 
 export default function Sidebar({
-  folders,
-  essays,
-  activeFolder,
-  activeSlug,
-  onSelectEssay,
-  onCreateEssay,
-  onDeleteEssay,
-  onMoveEssay,
-  onCreateFolder,
-  onRenameFolder,
-  onDeleteFolder,
-  onPull,
-  commitMessage,
-  onCommitMessageChange,
-  onPush,
-}) {
-  const [collapsed, setCollapsed] = useState({})
-  const [contextMenu, setContextMenu] = useState(null)
-  const [inlineNew, setInlineNew] = useState(null)
+  folders, essays, activeFolder, activeSlug,
+  onSelectEssay, onCreateEssay, onDeleteEssay, onMoveEssay,
+  onCreateFolder, onRenameFolder, onDeleteFolder,
+  onPull, commitMessage, onCommitMessageChange, onPush,
+}: SidebarProps) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [inlineNew, setInlineNew] = useState<InlineNew | null>(null)
   const [newTitle, setNewTitle] = useState('')
-  const [renaming, setRenaming] = useState(null)
+  const [renaming, setRenaming] = useState<Renaming | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [newFolderMode, setNewFolderMode] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
 
-  const openCtx = useCallback((e, items) => {
+  const openCtx = useCallback((e: React.MouseEvent, items: ContextMenuItem[]) => {
     e.preventDefault()
     setContextMenu({ x: e.clientX, y: e.clientY, items })
   }, [])
 
-  function essaysInFolder(folder) {
+  function essaysInFolder(folder: string) {
     return essays.filter(e => e.folder === folder)
   }
 
-  function handleFolderCtx(e, folder) {
+  function handleFolderCtx(e: React.MouseEvent, folder: string) {
     openCtx(e, [
       { label: 'New essay', action: () => { setInlineNew({ folder }); setNewTitle('') } },
       { label: 'Rename', action: () => { setRenaming({ folder }); setRenameValue(folder) } },
@@ -49,7 +71,7 @@ export default function Sidebar({
     ])
   }
 
-  function handleEssayCtx(e, essay) {
+  function handleEssayCtx(e: React.MouseEvent, essay: Essay) {
     openCtx(e, [
       {
         label: 'Move to…', action: () => {
@@ -65,13 +87,13 @@ export default function Sidebar({
     ])
   }
 
-  function submitNewEssay(folder) {
+  function submitNewEssay(folder: string) {
     if (newTitle.trim()) onCreateEssay(folder, newTitle.trim())
     setInlineNew(null)
     setNewTitle('')
   }
 
-  function submitRename(oldName) {
+  function submitRename(oldName: string) {
     if (renameValue.trim() && renameValue !== oldName) onRenameFolder(oldName, renameValue.trim())
     setRenaming(null)
   }
@@ -84,24 +106,14 @@ export default function Sidebar({
 
   return (
     <div className="w-[220px] bg-[#f7f6f3] border-r border-[#e8e5e0] flex flex-col flex-shrink-0 select-none">
-      {/* Header */}
       <div className="px-4 py-3.5 border-b border-[#e8e5e0] flex items-center justify-between">
         <span className="text-[10px] tracking-[0.1em] text-[#a8a29e] font-semibold uppercase">Essays</span>
         <div className="flex gap-2.5 items-center">
-          <button
-            onClick={onPull}
-            title="Pull from GitHub"
-            className="text-[#c4bfb9] hover:text-[#78716c] text-sm leading-none transition-colors"
-          >↓</button>
-          <button
-            onClick={() => { setNewFolderMode(true); setNewFolderName('') }}
-            title="New folder"
-            className="text-[#c4bfb9] hover:text-[#78716c] text-base leading-none transition-colors"
-          >+</button>
+          <button onClick={onPull} title="Pull from GitHub" className="text-[#c4bfb9] hover:text-[#78716c] text-sm leading-none transition-colors">↓</button>
+          <button onClick={() => { setNewFolderMode(true); setNewFolderName('') }} title="New folder" className="text-[#c4bfb9] hover:text-[#78716c] text-base leading-none transition-colors">+</button>
         </div>
       </div>
 
-      {/* Folder list */}
       <div className="flex-1 overflow-y-auto py-2">
         {newFolderMode && (
           <input
@@ -177,7 +189,6 @@ export default function Sidebar({
         })}
       </div>
 
-      {/* Footer: git push */}
       <div className="border-t border-[#e8e5e0] p-3">
         <input
           value={commitMessage}

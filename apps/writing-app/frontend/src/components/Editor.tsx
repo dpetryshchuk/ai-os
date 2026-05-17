@@ -2,17 +2,20 @@ import { useEffect, useRef, useState } from 'react'
 import { EditorView, minimalSetup } from 'codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { marked } from 'marked'
-import { api } from '../lib/api'
+import { api, type Essay, type Frontmatter } from '../lib/api'
 import { wikiLinksExtension } from '../plugins/wikiLinks'
 
-function renderMarkdown(text) {
-  let html = marked.parse(text || '')
+type SaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
+type ViewMode = 'edit' | 'split' | 'preview'
+
+function renderMarkdown(text: string): string {
+  let html = marked.parse(text || '') as string
   html = html.replace(/\[\[([^\]]+)\]\]/g, '<span data-wiki="$1" class="prose-wiki-link">[[$1]]</span>')
   return html
 }
 
-function ModeToggle({ mode, onMode, narrow }) {
-  const modes = narrow ? ['edit', 'preview'] : ['edit', 'split', 'preview']
+function ModeToggle({ mode, onMode, narrow }: { mode: ViewMode; onMode: (m: ViewMode) => void; narrow: boolean }) {
+  const modes: ViewMode[] = narrow ? ['edit', 'preview'] : ['edit', 'split', 'preview']
   const effective = narrow && mode === 'split' ? 'edit' : mode
   return (
     <div className="flex gap-0.5 rounded-md border border-[#e8e5e0] p-0.5 bg-[#f7f6f3]">
@@ -20,10 +23,8 @@ function ModeToggle({ mode, onMode, narrow }) {
         <button
           key={m}
           onClick={() => onMode(m)}
-          className={`px-2.5 py-1 text-[10px] rounded font-medium capitalize transition-colors ${
-            effective === m
-              ? 'bg-white text-[#1a1916] shadow-sm'
-              : 'text-[#9c9590] hover:text-[#1a1916]'
+          className={`px-2.5 py-1 text-[10px] rounded font-medium capitalize transition-colors duration-150 ${
+            effective === m ? 'bg-white text-[#1a1916] shadow-sm' : 'text-[#9c9590] hover:text-[#1a1916]'
           }`}
         >
           {m}
@@ -33,23 +34,34 @@ function ModeToggle({ mode, onMode, narrow }) {
   )
 }
 
-function SaveStatus({ status, lastSaved }) {
-  const text = {
+function EditorSaveStatus({ status, lastSaved }: { status: SaveStatus; lastSaved: number | null }) {
+  const text: Record<SaveStatus, string> = {
     idle: '',
     unsaved: 'Unsaved changes',
     saving: 'Saving…',
     saved: lastSaved ? `Saved ${Math.round((Date.now() - lastSaved) / 1000)}s ago` : 'Saved',
     error: 'Save failed',
-  }[status] || ''
-  return <span className="text-[11px] text-[#c4bfb9]">{text}</span>
+  }
+  return <span className="text-[11px] text-[#c4bfb9]">{text[status]}</span>
 }
 
-export default function Editor({ folder, slug, initialBody, frontmatterRef, bodyRef, essays, onSelectEssay, onCreateEssay }) {
-  const containerRef = useRef(null)
-  const saveTimerRef = useRef(null)
-  const [saveStatus, setSaveStatus] = useState('idle')
-  const [lastSaved, setLastSaved] = useState(null)
-  const [mode, setMode] = useState('edit')
+interface EditorProps {
+  folder: string
+  slug: string
+  initialBody: string
+  frontmatterRef: React.RefObject<Frontmatter | null>
+  bodyRef: React.MutableRefObject<string>
+  essays: Essay[]
+  onSelectEssay: (folder: string, slug: string) => void
+  onCreateEssay: (folder: string, title: string) => void
+}
+
+export default function Editor({ folder, slug, initialBody, frontmatterRef, bodyRef, essays, onSelectEssay, onCreateEssay }: EditorProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const [lastSaved, setLastSaved] = useState<number | null>(null)
+  const [mode, setMode] = useState<ViewMode>('edit')
   const [previewHtml, setPreviewHtml] = useState(() => renderMarkdown(initialBody))
   const [narrow, setNarrow] = useState(() => window.innerWidth < 768)
 
@@ -67,7 +79,6 @@ export default function Editor({ folder, slug, initialBody, frontmatterRef, body
 
   useEffect(() => {
     if (!containerRef.current) return
-
     const view = new EditorView({
       doc: initialBody,
       extensions: [
@@ -78,14 +89,14 @@ export default function Editor({ folder, slug, initialBody, frontmatterRef, body
         EditorView.updateListener.of((update) => {
           if (!update.docChanged) return
           const value = update.state.doc.toString()
-          if (bodyRef) bodyRef.current = value
+          bodyRef.current = value
           setPreviewHtml(renderMarkdown(value))
           setSaveStatus('unsaved')
           if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
           saveTimerRef.current = setTimeout(async () => {
             setSaveStatus('saving')
             try {
-              await api.essays.write(folder, slug, frontmatterRef.current, value)
+              await api.essays.write(folder, slug, frontmatterRef.current!, value)
               setSaveStatus('saved')
               setLastSaved(Date.now())
             } catch {
@@ -96,25 +107,19 @@ export default function Editor({ folder, slug, initialBody, frontmatterRef, body
       ],
       parent: containerRef.current,
     })
-
     return () => {
       view.destroy()
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     }
   }, [folder, slug])
 
-  function handleWikiClick(e) {
-    const el = e.target.closest('.cm-wiki-link, [data-wiki]')
+  function handleWikiClick(e: React.MouseEvent) {
+    const el = (e.target as HTMLElement).closest<HTMLElement>('.cm-wiki-link, [data-wiki]')
     if (!el) return
-    const title = el.dataset.wiki ?? el.textContent.slice(2, -2)
-    const match = essays?.find(es =>
-      String(es.title ?? es.slug).toLowerCase() === title.toLowerCase()
-    )
-    if (match) {
-      onSelectEssay?.(match.folder, match.slug)
-    } else {
-      onCreateEssay?.(folder, title)
-    }
+    const title = el.dataset.wiki ?? el.textContent?.slice(2, -2) ?? ''
+    const match = essays.find(es => String(es.title ?? es.slug).toLowerCase() === title.toLowerCase())
+    if (match) onSelectEssay(match.folder, match.slug)
+    else onCreateEssay(folder, title)
   }
 
   const effectiveMode = narrow && mode === 'split' ? 'edit' : mode
@@ -124,7 +129,7 @@ export default function Editor({ folder, slug, initialBody, frontmatterRef, body
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-5 py-2 border-b border-[#e8e5e0] flex-shrink-0">
-        <SaveStatus status={saveStatus} lastSaved={lastSaved} />
+        <EditorSaveStatus status={saveStatus} lastSaved={lastSaved} />
         <ModeToggle mode={mode} onMode={setMode} narrow={narrow} />
       </div>
       <div className="flex-1 overflow-hidden flex">
