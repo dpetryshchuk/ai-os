@@ -225,7 +225,7 @@ def git_push(body: dict):
         if commit.returncode != 0 and not nothing_to_commit:
             raise HTTPException(400, commit.stderr.strip() or commit.stdout.strip() or "git commit failed")
         result = subprocess.run(
-            ["git", "push", remote, "HEAD:master"],
+            ["git", "push", remote, "HEAD:main"],
             cwd=REPO_DIR, capture_output=True, text=True, check=True
         )
         return {"ok": True, "output": result.stdout.strip() or commit.stdout.strip()}
