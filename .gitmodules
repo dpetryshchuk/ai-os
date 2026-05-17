@@ -7,3 +7,6 @@
 [submodule "external/harper"]
 	path = external/harper
 	url = https://github.com/Automattic/harper.git
+[submodule "external/react-doctor"]
+	path = external/react-doctor
+	url = https://github.com/millionco/react-doctor.git
