@@ -3,8 +3,8 @@ FROM node:22-alpine AS frontend-builder
 WORKDIR /app
 
 COPY packages/ui ./packages/ui
-COPY apps/jobsearch/frontend/package.json apps/jobsearch/frontend/package-lock.json ./apps/jobsearch/frontend/
-RUN cd apps/jobsearch/frontend && npm ci
+COPY apps/jobsearch/frontend/package.json ./apps/jobsearch/frontend/
+RUN cd apps/jobsearch/frontend && npm install
 COPY apps/jobsearch/frontend ./apps/jobsearch/frontend
 RUN cd apps/jobsearch/frontend && npm run build
 
