@@ -1,9 +1,9 @@
 [submodule "inspo/dmytropetryshchuk"]
-	path = inspo/dmytropetryshchuk
+	path = external/dmytropetryshchuk
 	url = https://github.com/dpetryshchuk/dmytropetryshchuk.git
 [submodule "inspo/freewrite"]
-	path = inspo/freewrite
+	path = external/freewrite
 	url = https://github.com/farzaa/freewrite.git
 [submodule "inspo/harper"]
-	path = inspo/harper
+	path = external/harper
 	url = https://github.com/Automattic/harper.git
