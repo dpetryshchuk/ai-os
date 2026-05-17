@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import { ChevronRight, Send } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn } from '@ui/lib/utils'
 
 const BASE = window.location.hostname === 'localhost' ? 'http://localhost:4111' : ''
 const STREAM_URL = BASE + '/api/agents/jobsearch/stream'

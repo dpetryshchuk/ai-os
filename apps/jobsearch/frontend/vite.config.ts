@@ -5,7 +5,13 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: { '@': path.resolve(__dirname, './src') },
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      '@ui': path.resolve(__dirname, '../../../packages/ui/src'),
+      'clsx': path.resolve(__dirname, './node_modules/clsx'),
+      'tailwind-merge': path.resolve(__dirname, './node_modules/tailwind-merge'),
+      'class-variance-authority': path.resolve(__dirname, './node_modules/class-variance-authority'),
+    },
   },
   build: {
     outDir: '../public',

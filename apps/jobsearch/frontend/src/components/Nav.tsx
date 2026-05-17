@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 import { Activity, BarChart2, Briefcase, Database, FileText, Inbox, MessageSquare, Pencil, Users } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
-import { cn } from '@/lib/utils'
+import { cn } from '@ui/lib/utils'
 
 interface NavItem {
   to: string

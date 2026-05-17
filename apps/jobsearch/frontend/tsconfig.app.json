@@ -22,7 +22,14 @@
     "noFallthroughCasesInSwitch": true,
     "ignoreDeprecations": "6.0",
     "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] }
+    "paths": {
+      "@/*": ["./src/*"],
+      "@ui/*": ["../../../packages/ui/src/*"],
+      "clsx": ["./node_modules/clsx"],
+      "tailwind-merge": ["./node_modules/tailwind-merge"],
+      "class-variance-authority": ["./node_modules/class-variance-authority"],
+      "@base-ui/react/*": ["./node_modules/@base-ui/react/*"]
+    }
   },
   "include": ["src"]
 }
