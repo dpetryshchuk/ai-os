@@ -20,7 +20,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return data as T
 }
 
-export const freewroteApi = {
+export const freewriteApi = {
   entries: {
     list: () => req<{ entries: Entry[] }>('GET', '/entries').then(d => d.entries),
     create: () => req<{ id: string }>('POST', '/entries').then(d => d.id),
