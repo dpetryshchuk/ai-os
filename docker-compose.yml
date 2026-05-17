@@ -8,9 +8,10 @@ services:
       REPO_DIR: /repo
       CONTENT_DIR: /repo/content/essays
       FREEWRITE_DIR: /freewrite
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      GITHUB_REPO: ${GITHUB_REPO}
     volumes:
       - ${WRITING_DIR:-/tmp/writing}:/repo
-      - ${SSH_DIR:-/tmp/ssh}:/root/.ssh:ro
       - ${FREEWRITE_DIR:-/home/dima/freewrite}:/freewrite
     networks:
       - internal

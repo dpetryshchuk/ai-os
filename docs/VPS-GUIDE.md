@@ -19,12 +19,14 @@ Everything needed to operate and extend the server.
 
 ---
 
-## Installed software
+## Installed software (host)
 
-- **Docker + Docker Compose** — all services run as containers
-- **Caddy** — runs as a systemd service (`/usr/bin/caddy`), reverse proxy + automatic HTTPS. Config: `/home/dima/ai-os/caddy/Caddyfile`
+- **Docker + Docker Compose** — all app services run as containers
+- **Caddy** — systemd service (`caddy.service`), reverse proxy + automatic HTTPS. Binary: `/usr/bin/caddy`. Config: `/home/dima/ai-os/caddy/Caddyfile`. Reload: `sudo systemctl reload-or-restart caddy`. The `dima` user has passwordless sudo for this command (`/etc/sudoers.d/dima-caddy`).
+- **PostgreSQL 16** — systemd service (`postgresql@16-main.service`) running on `127.0.0.1:5432`. This is a host-level Postgres separate from the Docker Compose Postgres container (which is internal-only). Not used by any app currently — the Docker Compose Postgres handles all app databases.
+- **fail2ban** — SSH brute-force protection
 
-Everything else (Python, Node.js, Redis, Postgres) runs inside containers. Nothing is installed directly on the host.
+Everything else (Python, Node.js, Redis) runs inside containers.
 
 ---
 
@@ -48,6 +50,23 @@ All containers are on the `internal` bridge network. Only Caddy exposes ports 80
 
 ---
 
+## Directory layout (`/home/dima`)
+
+```
+/home/dima/
+├── ai-os/          ← monorepo (git, docker-compose.yml, caddy/, etc.)
+├── writing/        ← clone of dpetryshchuk/dmytropetryshchuk.com (personal site)
+│                     mounted as /repo inside writing-app container
+│                     remote: https://github.com/dpetryshchuk/dmytropetryshchuk.com.git
+├── freewrite/      ← freewrite entries (mounted into writing-app container)
+├── daily_log.sql   ← SQL backup (manual snapshot)
+└── jobsearch.sql   ← SQL backup (manual snapshot)
+```
+
+The personal site repo (`writing/`) is a standalone clone, not the git submodule at `external/dmytropetryshchuk`. The submodule can't be used as a Docker volume because its `.git` file uses a host-relative path that breaks inside containers.
+
+---
+
 ## Common commands
 
 ```bash
@@ -55,16 +74,13 @@ All containers are on the `internal` bridge network. Only Caddy exposes ports 80
 ssh dima@46.225.78.10
 
 # View running containers
-docker compose ps
+cd ~/ai-os && docker compose ps
 
 # Tail logs for a service
 docker compose logs -f <service>
 
-# Restart a service
-docker compose restart <service>
-
-# Pull latest image and restart
-docker compose pull <service> && docker compose up -d <service>
+# Restart a service (picks up config changes — use up -d, not restart)
+docker compose up -d <service>
 
 # Bring everything up (after infra changes)
 docker compose up -d --remove-orphans
@@ -73,13 +89,15 @@ docker compose up -d --remove-orphans
 sudo systemctl reload-or-restart caddy
 ```
 
+> **Note:** `docker compose restart` does NOT re-read `.env`. Always use `docker compose up -d <service>` when env vars change.
+
 ---
 
 ## Caddyfile
 
-Location in repo: `caddy/Caddyfile`. On the VPS it's bind-mounted into the Caddy container.
+Location in repo: `caddy/Caddyfile`. Read directly by the Caddy systemd service from that path on the host.
 
-Auth credentials are stored in `caddy/auth_credentials` on the VPS (not committed to git). Format: one `username <bcrypt-hash>` per line.
+Auth credentials stored in `caddy/auth_credentials` on the VPS (not committed to git). Format: one `username <bcrypt-hash>` per line.
 
 Generate a bcrypt hash:
 ```bash
@@ -104,11 +122,11 @@ home.dmytropetryshchuk.com {
 
 ---
 
-## Postgres
+## Postgres (Docker)
 
 Managed by Docker Compose. Init script: `postgres/init.sh` — creates users and databases on first boot.
 
-Current databases: `daily_log`, `jobsearch`, `home`
+Current databases: `daily_log`, `jobsearch`
 
 Passwords set via environment variables in `.env` on the VPS:
 - `POSTGRES_PASSWORD` — superuser password
@@ -117,8 +135,24 @@ Passwords set via environment variables in `.env` on the VPS:
 
 To query locally, open an SSH tunnel:
 ```bash
-ssh -L 5432:localhost:5432 dima@46.225.78.10
+ssh -L 5433:localhost:5432 dima@46.225.78.10
+# then connect to localhost:5433 (use 5433 to avoid conflict with host Postgres on 5432)
 ```
+
+---
+
+## Writing-app: publishing to personal site
+
+The writing-app pushes essays to `dpetryshchuk/dmytropetryshchuk.com` via the **GitHub API** (HTTPS token, no SSH keys needed inside the container).
+
+Required env vars in `/home/dima/ai-os/.env`:
+```
+WRITING_DIR=/home/dima/writing
+GITHUB_TOKEN=github_pat_...
+GITHUB_REPO=dpetryshchuk/dmytropetryshchuk.com
+```
+
+When push or pull is triggered from the writing-app UI, it uses `x-access-token:<GITHUB_TOKEN>` in the HTTPS remote URL. No SSH key setup needed inside Docker.
 
 ---
 
@@ -192,6 +226,7 @@ SSH in and add to `/home/dima/ai-os/.env`:
 
 Then:
 ```bash
+cd ~/ai-os
 docker compose up -d postgres   # re-run init if DB doesn't exist yet
 docker compose up -d <name>
 ```
@@ -225,11 +260,23 @@ All matrix jobs run with `fail-fast: false` — one app failing doesn't cancel t
 
 ## Gotchas
 
-**`git pull` fails after npm installs modify the lock file.**
-Deploy scripts use `git fetch origin master && git reset --hard origin/master` instead of `git pull`.
+**`docker compose restart` doesn't re-read `.env`.**
+Use `docker compose up -d <service>` instead whenever env vars change.
 
 **`systemctl reload caddy` fails if Caddy is stopped.**
-Use `sudo systemctl reload-or-restart caddy` — handles both running and stopped states.
+Use `sudo systemctl reload-or-restart caddy` — handles both running and stopped states. The `dima` user has NOPASSWD sudo for this command via `/etc/sudoers.d/dima-caddy`.
+
+**Caddy is a systemd service, not a Docker container.**
+`systemctl status caddy`, not `docker compose logs caddy`. Config is read from `/home/dima/ai-os/caddy/Caddyfile` on the host directly.
+
+**The personal site clone at `/home/dima/writing` must use HTTPS remote.**
+The writing-app container pushes via GitHub token over HTTPS. SSH remotes won't work inside the container. Remote should be `https://github.com/dpetryshchuk/dmytropetryshchuk.com.git`.
+
+**Don't use the `external/dmytropetryshchuk` submodule as the writing volume.**
+The submodule's `.git` file uses a host-relative path (`../../.git/modules/...`) that doesn't resolve inside a Docker container. Use the standalone clone at `/home/dima/writing` instead.
+
+**SSH tunnel for Postgres uses port 5433, not 5432.**
+The host has its own PostgreSQL 16 running on port 5432. Tunnel to 5433 locally to avoid the conflict: `ssh -L 5433:localhost:5432 dima@46.225.78.10`.
 
 **Bcrypt hashes with `$` get mangled in shell scripts.**
 `$2a$14$...` contains `$2`, `$14` which bash expands as variables. Always write the credentials file with `nano`. Never embed in heredocs or shell commands.
@@ -242,6 +289,3 @@ The Dockerfile copies from `apps/<name>/public/` (relative to repo root). If `ou
 
 **GitHub Actions `workflow_dispatch` + `dorny/paths-filter`.**
 `paths-filter` requires a push event diff context — it errors on `workflow_dispatch`. The detect job conditionally skips it and outputs `true` for all apps on manual runs.
-
-**Two SSH keys per deployment direction.**
-GitHub Actions → VPS uses one keypair. VPS → GitHub (for `git fetch`) uses a separate keypair. Don't reuse the same key for both directions.
