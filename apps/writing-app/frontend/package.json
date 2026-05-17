@@ -11,10 +11,12 @@
   "dependencies": {
     "@codemirror/lang-markdown": "^6.3.2",
     "@fontsource-variable/geist": "^5.2.8",
+    "@fontsource/lato": "^5.1.0",
     "codemirror": "^6.0.1",
     "marked": "^15.0.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0"
   },
   "devDependencies": {
     "@base-ui/react": "^1.0.0",

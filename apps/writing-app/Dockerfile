@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY packages/ui ./packages/ui
 COPY apps/writing-app/frontend/package.json apps/writing-app/frontend/package-lock.json ./apps/writing-app/frontend/
-RUN cd apps/writing-app/frontend && npm ci
+RUN cd apps/writing-app/frontend && npm install
 COPY apps/writing-app/frontend ./apps/writing-app/frontend
 RUN cd apps/writing-app/frontend && npm run build
 

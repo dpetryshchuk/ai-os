@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
+import { Routes, Route } from 'react-router-dom'
 import { api, type Essay, type EssayData, type Frontmatter } from './lib/api'
 import Sidebar from './components/Sidebar'
 import FrontmatterBar from './components/FrontmatterBar'
 import Editor from './components/Editor'
+import FreewirtePage from './pages/Freewrite'
 
 export default function App() {
   const [folders, setFolders] = useState<string[]>([])
@@ -96,35 +98,40 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar
-        folders={folders} essays={essays}
-        activeFolder={activeFolder} activeSlug={activeSlug}
-        onSelectEssay={selectEssay} onCreateEssay={handleCreateEssay}
-        onDeleteEssay={handleDeleteEssay} onMoveEssay={handleMoveEssay}
-        onCreateFolder={handleCreateFolder} onRenameFolder={handleRenameFolder}
-        onDeleteFolder={handleDeleteFolder} onPull={handlePull}
-        commitMessage={commitMessage} onCommitMessageChange={setCommitMessage}
-        onPush={handlePush}
-      />
-      <div className="flex-1 flex flex-col overflow-hidden bg-white">
-        {essay ? (
-          <>
-            <FrontmatterBar frontmatter={essay.frontmatter} onChange={handleFrontmatterChange} />
-            <Editor
-              folder={activeFolder!} slug={activeSlug!}
-              initialBody={essay.body}
-              frontmatterRef={frontmatterRef} bodyRef={bodyRef}
-              essays={essays}
-              onSelectEssay={selectEssay} onCreateEssay={handleCreateEssay}
-            />
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-            Select an essay or create a new one
+    <Routes>
+      <Route path="/freewrite" element={<FreewirtePage />} />
+      <Route path="/*" element={
+        <div className="flex h-screen overflow-hidden">
+          <Sidebar
+            folders={folders} essays={essays}
+            activeFolder={activeFolder} activeSlug={activeSlug}
+            onSelectEssay={selectEssay} onCreateEssay={handleCreateEssay}
+            onDeleteEssay={handleDeleteEssay} onMoveEssay={handleMoveEssay}
+            onCreateFolder={handleCreateFolder} onRenameFolder={handleRenameFolder}
+            onDeleteFolder={handleDeleteFolder} onPull={handlePull}
+            commitMessage={commitMessage} onCommitMessageChange={setCommitMessage}
+            onPush={handlePush}
+          />
+          <div className="flex-1 flex flex-col overflow-hidden bg-white">
+            {essay ? (
+              <>
+                <FrontmatterBar frontmatter={essay.frontmatter} onChange={handleFrontmatterChange} />
+                <Editor
+                  folder={activeFolder!} slug={activeSlug!}
+                  initialBody={essay.body}
+                  frontmatterRef={frontmatterRef} bodyRef={bodyRef}
+                  essays={essays}
+                  onSelectEssay={selectEssay} onCreateEssay={handleCreateEssay}
+                />
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+                Select an essay or create a new one
+              </div>
+            )}
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      } />
+    </Routes>
   )
 }
