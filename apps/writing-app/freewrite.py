@@ -129,8 +129,10 @@ async def upload_video(
         while chunk := await video.read(1024 * 1024):
             await f.write(chunk)
     if transcript:
-        _transcript_path(d, entry_id).write_text(transcript, encoding="utf-8")
-    _entry_path(d, entry_id).write_text("Video Entry", encoding="utf-8")
+        async with aiofiles.open(_transcript_path(d, entry_id), "w", encoding="utf-8") as f:
+            await f.write(transcript)
+    async with aiofiles.open(_entry_path(d, entry_id), "w", encoding="utf-8") as f:
+        await f.write("Video Entry")
     return {"ok": True}
 
 

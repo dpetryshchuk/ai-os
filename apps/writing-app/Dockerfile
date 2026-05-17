@@ -15,7 +15,7 @@ RUN git config --global --add safe.directory /repo
 WORKDIR /app
 COPY apps/writing-app/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY apps/writing-app/main.py .
+COPY apps/writing-app/main.py apps/writing-app/freewrite.py ./
 COPY --from=frontend-builder /app/apps/writing-app/public ./public
 ENV PORT=4112
 EXPOSE 4112
