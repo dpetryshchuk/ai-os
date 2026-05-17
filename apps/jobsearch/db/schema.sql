@@ -66,3 +66,19 @@ CREATE INDEX IF NOT EXISTS idx_job_postings_status  ON job_postings(status);
 CREATE INDEX IF NOT EXISTS idx_interactions_contact ON interactions(contact_id);
 CREATE INDEX IF NOT EXISTS idx_interactions_date    ON interactions(date);
 CREATE INDEX IF NOT EXISTS idx_content_posts_date   ON content_posts(posted_date);
+
+-- Notes table (for reference/research notes)
+CREATE TABLE IF NOT EXISTS notes (
+  id          TEXT PRIMARY KEY,
+  category    TEXT NOT NULL DEFAULT 'note',
+  title       TEXT,
+  url         TEXT,
+  content     TEXT,
+  created_at  TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_notes_fts ON notes
+  USING GIN(to_tsvector('english',
+    COALESCE(title, '') || ' ' ||
+    COALESCE(content, '') || ' ' ||
+    COALESCE(url, '')
+  ));
