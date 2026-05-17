@@ -72,7 +72,14 @@ async def agent_stream(body: dict, pool: asyncpg.Pool = Depends(get_pool)):
         async for chunk in agentic_stream(messages, pool, _anthropic):
             yield chunk
 
-    return StreamingResponse(generate(), media_type="text/event-stream")
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 # ── Pipeline ──────────────────────────────────────────────────────────────────
