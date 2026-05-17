@@ -3,6 +3,12 @@ name: Deploy
 on:
   push:
     branches: [master]
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: 'Apps to deploy — comma-separated (writing-app,daily-log,jobsearch,home) or leave blank for all'
+        required: false
+        default: 'all'
 
 jobs:
   detect:
@@ -44,11 +50,28 @@ jobs:
     steps:
       - id: build
         run: |
+          # workflow_dispatch with blank or "all" → deploy every app
+          MANUAL="${{ github.event.inputs.apps }}"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            if [[ -z "$MANUAL" || "$MANUAL" == "all" ]]; then
+              MANUAL="writing-app,daily-log,jobsearch,home"
+            fi
+          fi
+
           includes=()
-          [[ "${{ needs.detect.outputs.writing-app }}" == "true" ]] && includes+=('{"app":"writing-app","dir":"apps/writing-app"}')
-          [[ "${{ needs.detect.outputs.daily-log }}" == "true" ]] && includes+=('{"app":"daily-log","dir":"apps/daily-log"}')
-          [[ "${{ needs.detect.outputs.jobsearch }}" == "true" ]] && includes+=('{"app":"jobsearch","dir":"apps/jobsearch"}')
-          [[ "${{ needs.detect.outputs.home }}" == "true" ]] && includes+=('{"app":"home","dir":"apps/home"}')
+          if [[ "$MANUAL" == *"writing-app"* || "${{ needs.detect.outputs.writing-app }}" == "true" ]]; then
+            includes+=('{"app":"writing-app","dir":"apps/writing-app"}')
+          fi
+          if [[ "$MANUAL" == *"daily-log"* || "${{ needs.detect.outputs.daily-log }}" == "true" ]]; then
+            includes+=('{"app":"daily-log","dir":"apps/daily-log"}')
+          fi
+          if [[ "$MANUAL" == *"jobsearch"* || "${{ needs.detect.outputs.jobsearch }}" == "true" ]]; then
+            includes+=('{"app":"jobsearch","dir":"apps/jobsearch"}')
+          fi
+          if [[ "$MANUAL" == *"home"* || "${{ needs.detect.outputs.home }}" == "true" ]]; then
+            includes+=('{"app":"home","dir":"apps/home"}')
+          fi
+
           if [ ${#includes[@]} -gt 0 ]; then
             joined=$(IFS=,; echo "${includes[*]}")
             echo "matrix={\"include\":[$joined]}" >> $GITHUB_OUTPUT
@@ -92,12 +115,13 @@ jobs:
           script: |
             set -e
             cd /home/dima/ai-os
+            git fetch origin master && git reset --hard origin/master
             docker compose pull ${{ matrix.app }}
             docker compose up -d ${{ matrix.app }}
 
   deploy-infra:
     needs: detect
-    if: needs.detect.outputs.infra == 'true'
+    if: needs.detect.outputs.infra == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Deploy infra to VPS
@@ -110,4 +134,6 @@ jobs:
             set -e
             cd /home/dima/ai-os
             git fetch origin master && git reset --hard origin/master
+            docker compose pull --quiet || true
+            docker compose up -d --remove-orphans
             sudo systemctl reload-or-restart caddy
