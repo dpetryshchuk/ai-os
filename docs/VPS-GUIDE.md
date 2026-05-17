@@ -22,7 +22,7 @@ Everything needed to operate and extend the server.
 ## Installed software
 
 - **Docker + Docker Compose** — all services run as containers
-- **Caddy** — runs as a Docker container, reverse proxy + automatic HTTPS
+- **Caddy** — runs as a systemd service (`/usr/bin/caddy`), reverse proxy + automatic HTTPS. Config: `/home/dima/ai-os/caddy/Caddyfile`
 
 Everything else (Python, Node.js, Redis, Postgres) runs inside containers. Nothing is installed directly on the host.
 
