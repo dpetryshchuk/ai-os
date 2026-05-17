@@ -23,3 +23,6 @@ apps/jobsearch-vps/morning-outputs/
 # Frontend build artifacts (built on VPS, not committed)
 apps/*/public/
 apps/*/frontend/dist/
+
+# visual brainstorming
+.superpowers/
