@@ -61,6 +61,56 @@ services:
       - internal
     restart: unless-stopped
 
+  home:
+    image: ghcr.io/dpetryshchuk/ai-os/home:latest
+    ports:
+      - "127.0.0.1:4114:4114"
+    environment:
+      PORT: "4114"
+      REDIS_URL: redis://redis:6379/0
+      JOBSEARCH_URL: http://jobsearch:4111
+      WRITING_APP_URL: http://writing-app:4112
+      DAILY_LOG_URL: http://daily-log:4113
+    depends_on:
+      - redis
+    networks:
+      - internal
+    restart: unless-stopped
+
+  celery-worker:
+    image: ghcr.io/dpetryshchuk/ai-os/home:latest
+    command: celery -A tasks worker --loglevel=info
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      JOBSEARCH_URL: http://jobsearch:4111
+      WRITING_APP_URL: http://writing-app:4112
+      DAILY_LOG_URL: http://daily-log:4113
+    depends_on:
+      - redis
+    networks:
+      - internal
+    restart: unless-stopped
+
+  celery-beat:
+    image: ghcr.io/dpetryshchuk/ai-os/home:latest
+    command: celery -A tasks beat --loglevel=info
+    environment:
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - redis
+      - celery-worker
+    networks:
+      - internal
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    expose:
+      - "6379"
+    networks:
+      - internal
+    restart: unless-stopped
+
 networks:
   internal:
     driver: bridge
