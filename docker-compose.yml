@@ -1,22 +1,8 @@
 services:
-  caddy:
-    image: caddy:2-alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
-      - ./caddy/auth_credentials:/etc/caddy/auth_credentials:ro
-      - caddy_data:/data
-    command: sh -c "caddy fmt --overwrite /etc/caddy/Caddyfile && caddy run --config /etc/caddy/Caddyfile"
-    networks:
-      - internal
-    restart: unless-stopped
-
   writing-app:
     image: ghcr.io/dpetryshchuk/ai-os/writing-app:latest
-    expose:
-      - "4112"
+    ports:
+      - "127.0.0.1:4112:4112"
     environment:
       PORT: "4112"
       REPO_DIR: /repo
@@ -30,8 +16,8 @@ services:
 
   daily-log:
     image: ghcr.io/dpetryshchuk/ai-os/daily-log:latest
-    expose:
-      - "4113"
+    ports:
+      - "127.0.0.1:4113:4113"
     environment:
       PORT: "4113"
       DATABASE_URL: postgresql://daily_log:${DAILY_LOG_DB_PASSWORD}@postgres:5432/daily_log
@@ -43,8 +29,8 @@ services:
 
   jobsearch:
     image: ghcr.io/dpetryshchuk/ai-os/jobsearch:latest
-    expose:
-      - "4111"
+    ports:
+      - "127.0.0.1:4111:4111"
     environment:
       PORT: "4111"
       DATABASE_URL: postgresql://jobsearch:${JOBSEARCH_DB_PASSWORD}@postgres:5432/jobsearch
@@ -80,6 +66,5 @@ networks:
     driver: bridge
 
 volumes:
-  caddy_data:
   postgres_data:
   jobsearch_uploads:

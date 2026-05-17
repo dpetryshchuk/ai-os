@@ -1,20 +1,20 @@
 (auth) {
   basic_auth {
-    import /etc/caddy/auth_credentials
+    import /home/dima/ai-os/caddy/auth_credentials
   }
 }
 
 jobsearch.dmytropetryshchuk.com {
   import auth
-  reverse_proxy jobsearch:4111
+  reverse_proxy localhost:4111
 }
 
 write.dmytropetryshchuk.com {
   import auth
-  reverse_proxy writing-app:4112
+  reverse_proxy localhost:4112
 }
 
 log.dmytropetryshchuk.com {
   import auth
-  reverse_proxy daily-log:4113
+  reverse_proxy localhost:4113
 }

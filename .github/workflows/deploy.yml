@@ -104,4 +104,4 @@ jobs:
             set -e
             cd /home/dima/ai-os
             git fetch origin master && git reset --hard origin/master
-            docker compose up -d caddy
+            sudo systemctl reload caddy
