@@ -4,9 +4,8 @@ import secrets
 from typing import AsyncIterator
 
 import asyncpg
-from openai import AsyncOpenAI
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.litellm import LiteLLMModel
 
 INSTRUCTIONS = """You are a job search CRM assistant. Help the user manage their job search pipeline.
 
@@ -25,11 +24,7 @@ Rules:
 - Stage values: Outreached → Responded → Ongoing → Dead
 """
 
-_deepseek = AsyncOpenAI(
-    base_url="https://api.deepseek.com/v1",
-    api_key=os.environ.get("DEEPSEEK_API_KEY", ""),
-)
-model = OpenAIModel("deepseek-chat", openai_client=_deepseek)
+model = LiteLLMModel("deepseek/deepseek-chat")
 agent: Agent[asyncpg.Pool, str] = Agent(
     model=model,
     system_prompt=INSTRUCTIONS,
