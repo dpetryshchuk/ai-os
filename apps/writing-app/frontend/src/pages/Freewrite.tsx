@@ -1,5 +1,5 @@
 import '@fontsource/lato'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { freewriteApi } from '../lib/freewrite-api'
 import { useEntries } from '../hooks/freewrite/useEntries'
@@ -46,10 +46,13 @@ export default function Freewrite() {
     return () => document.removeEventListener('keydown', block)
   }, [backspaceEnabled])
 
-  // Auto-select first entry on load (or create one if none exist)
+  const hasAutoSelected = useRef(false)
+
+  // Auto-select first entry on first load only
   useEffect(() => {
-    if (entries.length === 0) return
-    if (activeId == null) selectEntry(entries[0].id)
+    if (hasAutoSelected.current || entries.length === 0) return
+    hasAutoSelected.current = true
+    selectEntry(entries[0].id)
   }, [entries])
 
   async function selectEntry(id: string) {
