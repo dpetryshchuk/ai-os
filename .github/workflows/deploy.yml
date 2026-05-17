@@ -109,4 +109,4 @@ jobs:
             set -e
             cd /home/dima/ai-os
             git fetch origin master && git reset --hard origin/master
-            sudo systemctl reload caddy
+            sudo systemctl reload-or-restart caddy
