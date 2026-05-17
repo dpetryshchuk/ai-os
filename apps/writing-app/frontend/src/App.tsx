@@ -120,7 +120,7 @@ export default function App() {
             />
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-[#c4bfb9] text-sm">
+          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
             Select an essay or create a new one
           </div>
         )}
