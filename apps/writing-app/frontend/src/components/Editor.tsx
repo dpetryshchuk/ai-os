@@ -96,7 +96,8 @@ export default function Editor({ folder, slug, initialBody, frontmatterRef, body
           saveTimerRef.current = setTimeout(async () => {
             setSaveStatus('saving')
             try {
-              await api.essays.write(folder, slug, frontmatterRef.current!, value)
+              if (!frontmatterRef.current) return
+              await api.essays.write(folder, slug, frontmatterRef.current, value)
               setSaveStatus('saved')
               setLastSaved(Date.now())
             } catch {

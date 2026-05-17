@@ -1,4 +1,4 @@
-import { ViewPlugin, Decoration, type DecorationSet, type EditorView } from '@codemirror/view'
+import { ViewPlugin, Decoration, type DecorationSet, type EditorView, type ViewUpdate } from '@codemirror/view'
 import { RangeSetBuilder } from '@codemirror/state'
 
 const WIKI_RE = /\[\[([^\]]+)\]\]/g
@@ -27,7 +27,7 @@ export function wikiLinksExtension() {
       constructor(view: EditorView) {
         this.decorations = buildDecorations(view)
       }
-      update(update: { docChanged: boolean; selectionSet: boolean; view: EditorView }) {
+      update(update: ViewUpdate) {
         if (update.docChanged || update.selectionSet) {
           this.decorations = buildDecorations(update.view)
         }
