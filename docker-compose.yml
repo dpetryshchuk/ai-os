@@ -7,9 +7,11 @@ services:
       PORT: "4112"
       REPO_DIR: /repo
       CONTENT_DIR: /repo/content/essays
+      FREEWRITE_DIR: /freewrite
     volumes:
       - ${WRITING_DIR:-/tmp/writing}:/repo
       - ${SSH_DIR:-/tmp/ssh}:/root/.ssh:ro
+      - ${FREEWRITE_DIR:-/home/dima/freewrite}:/freewrite
     networks:
       - internal
     restart: unless-stopped
