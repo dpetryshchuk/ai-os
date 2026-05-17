@@ -6,4 +6,6 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
   CREATE DATABASE daily_log OWNER daily_log;
   CREATE USER jobsearch WITH PASSWORD '$JOBSEARCH_DB_PASSWORD';
   CREATE DATABASE jobsearch OWNER jobsearch;
+  CREATE USER home WITH PASSWORD '${HOME_DB_PASSWORD:-home}';
+  CREATE DATABASE home OWNER home;
 EOSQL

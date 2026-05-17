@@ -6,8 +6,7 @@
 
 home.dmytropetryshchuk.com {
   import auth
-  root * /home/dima/ai-os/home
-  file_server
+  reverse_proxy localhost:4114
 }
 
 jobsearch.dmytropetryshchuk.com {

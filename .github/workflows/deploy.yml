@@ -12,6 +12,7 @@ jobs:
       daily-log: ${{ steps.filter.outputs.daily-log }}
       jobsearch: ${{ steps.filter.outputs.jobsearch }}
       infra: ${{ steps.filter.outputs.infra }}
+      home: ${{ steps.filter.outputs.home }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -30,6 +31,9 @@ jobs:
             infra:
               - 'docker-compose.yml'
               - 'caddy/**'
+            home:
+              - 'apps/home/**'
+              - 'packages/ui/**'
 
   set-matrix:
     needs: detect
@@ -44,6 +48,7 @@ jobs:
           [[ "${{ needs.detect.outputs.writing-app }}" == "true" ]] && includes+=('{"app":"writing-app","dir":"apps/writing-app"}')
           [[ "${{ needs.detect.outputs.daily-log }}" == "true" ]] && includes+=('{"app":"daily-log","dir":"apps/daily-log"}')
           [[ "${{ needs.detect.outputs.jobsearch }}" == "true" ]] && includes+=('{"app":"jobsearch","dir":"apps/jobsearch"}')
+          [[ "${{ needs.detect.outputs.home }}" == "true" ]] && includes+=('{"app":"home","dir":"apps/home"}')
           if [ ${#includes[@]} -gt 0 ]; then
             joined=$(IFS=,; echo "${includes[*]}")
             echo "matrix={\"include\":[$joined]}" >> $GITHUB_OUTPUT
