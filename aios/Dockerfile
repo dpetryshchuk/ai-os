@@ -22,6 +22,8 @@ COPY aios/routers ./routers
 COPY aios/workers ./workers
 COPY aios/alembic ./alembic
 COPY aios/alembic.ini .
+COPY aios/alembic_daily ./alembic_daily
+COPY aios/alembic_daily.ini .
 
 COPY --from=frontend-builder /app/aios/public ./public
 
