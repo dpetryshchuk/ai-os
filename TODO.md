@@ -20,7 +20,7 @@
 
 ## aios first-deploy checklist
 
-- [ ] Add DNS A record `aios.dmytropetryshchuk.com → 46.225.78.10`
+- [ ] Add DNS A record `home.dmytropetryshchuk.com → 46.225.78.10`
 - [ ] Run `docker compose exec aios alembic upgrade head` on VPS (creates `os_events` table)
 - [ ] Push branch → verify GitHub Actions deploys `aios` service
 - [ ] Smoke-test all pages and agent chat

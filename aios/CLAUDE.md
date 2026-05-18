@@ -34,7 +34,7 @@ Local DB queries require an SSH tunnel: `ssh -L 5432:localhost:5432 dima@46.225.
 ## Architecture
 
 ```
-Browser → Caddy (aios.dmytropetryshchuk.com, basicauth)
+Browser → Caddy (home.dmytropetryshchuk.com, basicauth)
               → reverse_proxy localhost:4116 (flush_interval -1 for SSE)
                     → FastAPI (uvicorn main:app)
                           ↕ asyncpg        ↕ asyncpg
@@ -235,7 +235,7 @@ Full ops guide: `docs/VPS-GUIDE.md`
 
 ### First deploy checklist
 
-1. Add DNS A record `aios.dmytropetryshchuk.com → 46.225.78.10`
+1. Add DNS A record `home.dmytropetryshchuk.com → 46.225.78.10`
 2. Run Alembic migration on VPS to create `os_events` table:
    ```bash
    ssh dima@46.225.78.10
