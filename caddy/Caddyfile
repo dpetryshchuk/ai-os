@@ -10,27 +10,6 @@
   }
 }
 
-jobsearch.dmytropetryshchuk.com {
-  import auth
-  reverse_proxy localhost:4111 {
-    flush_interval -1
-  }
-}
-
-write.dmytropetryshchuk.com {
-  import auth
-  reverse_proxy localhost:4112 {
-    flush_interval -1
-  }
-}
-
-log.dmytropetryshchuk.com {
-  import auth
-  reverse_proxy localhost:4113 {
-    flush_interval -1
-  }
-}
-
 home.dmytropetryshchuk.com {
   import auth
   reverse_proxy localhost:4116 {

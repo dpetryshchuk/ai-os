@@ -4,19 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Workspace overview
 
-Five apps in a monorepo, all deployed to the same Hetzner VPS (`46.225.78.10`, `dmytropetryshchuk.com`).
+One unified app deployed to Hetzner VPS (`46.225.78.10`, `dmytropetryshchuk.com`).
 
 | App | Dir | Port | Domain |
 |---|---|---|---|
-| Job search CRM | `apps/jobsearch/` | 4111 | `jobsearch.dmytropetryshchuk.com` |
-| Writing app | `apps/writing-app/` | 4112 | `write.dmytropetryshchuk.com` |
-| Daily log | `apps/daily-log/` | 4113 | `log.dmytropetryshchuk.com` |
-| Home dashboard | `apps/home/` | 4114 | `home.dmytropetryshchuk.com` |
-| Freewrite | `apps/freewrite/` | 4115 | `freewrite.dmytropetryshchuk.com` |
+| AI OS (unified) | `aios/` | 4116 | `home.dmytropetryshchuk.com` |
 
-Next available port: **4116**
+Next available port: **4117**
 
-See each app's own `CLAUDE.md` (e.g. `apps/jobsearch/CLAUDE.md`) for app-specific commands and architecture.
+See `aios/CLAUDE.md` for commands, architecture, and API reference.
 
 ## Shared stack
 

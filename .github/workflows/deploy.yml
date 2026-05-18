@@ -6,15 +6,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  detect:
+  deploy-app:
     runs-on: ubuntu-latest
-    outputs:
-      writing-app: ${{ steps.out.outputs.writing-app }}
-      daily-log: ${{ steps.out.outputs.daily-log }}
-      jobsearch: ${{ steps.out.outputs.jobsearch }}
-      infra: ${{ steps.out.outputs.infra }}
-      home: ${{ steps.out.outputs.home }}
-      aios: ${{ steps.out.outputs.aios }}
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,93 +20,25 @@ jobs:
         if: github.event_name == 'push'
         with:
           filters: |
-            writing-app:
-              - 'apps/writing-app/**'
-              - 'packages/ui/**'
-            daily-log:
-              - 'apps/daily-log/**'
-              - 'packages/ui/**'
-            jobsearch:
-              - 'apps/jobsearch/**'
-              - 'packages/ui/**'
-            infra:
-              - 'docker-compose.yml'
-              - 'caddy/**'
-            home:
-              - 'apps/home/**'
-              - 'packages/ui/**'
             aios:
               - 'aios/**'
-      - id: out
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "writing-app=true" >> $GITHUB_OUTPUT
-            echo "daily-log=true"   >> $GITHUB_OUTPUT
-            echo "jobsearch=true"   >> $GITHUB_OUTPUT
-            echo "infra=true"       >> $GITHUB_OUTPUT
-            echo "home=true"        >> $GITHUB_OUTPUT
-            echo "aios=true"        >> $GITHUB_OUTPUT
-          else
-            echo "writing-app=${{ steps.filter.outputs.writing-app }}" >> $GITHUB_OUTPUT
-            echo "daily-log=${{ steps.filter.outputs.daily-log }}"     >> $GITHUB_OUTPUT
-            echo "jobsearch=${{ steps.filter.outputs.jobsearch }}"     >> $GITHUB_OUTPUT
-            echo "infra=${{ steps.filter.outputs.infra }}"             >> $GITHUB_OUTPUT
-            echo "home=${{ steps.filter.outputs.home }}"               >> $GITHUB_OUTPUT
-            echo "aios=${{ steps.filter.outputs.aios }}"               >> $GITHUB_OUTPUT
-          fi
-
-  set-matrix:
-    needs: detect
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.build.outputs.matrix }}
-      has-apps: ${{ steps.build.outputs.has-apps }}
-    steps:
-      - id: build
-        run: |
-          includes=()
-          [[ "${{ needs.detect.outputs.writing-app }}" == "true" ]] && includes+=('{"app":"writing-app","dir":"apps/writing-app"}')
-          [[ "${{ needs.detect.outputs.daily-log }}"   == "true" ]] && includes+=('{"app":"daily-log","dir":"apps/daily-log"}')
-          [[ "${{ needs.detect.outputs.jobsearch }}"   == "true" ]] && includes+=('{"app":"jobsearch","dir":"apps/jobsearch"}')
-          [[ "${{ needs.detect.outputs.home }}"        == "true" ]] && includes+=('{"app":"home","dir":"apps/home"}')
-          [[ "${{ needs.detect.outputs.aios }}"        == "true" ]] && includes+=('{"app":"aios","dir":"aios"}')
-          if [ ${#includes[@]} -gt 0 ]; then
-            joined=$(IFS=,; echo "${includes[*]}")
-            echo "matrix={\"include\":[$joined]}" >> $GITHUB_OUTPUT
-            echo "has-apps=true" >> $GITHUB_OUTPUT
-          else
-            echo "matrix={\"include\":[]}" >> $GITHUB_OUTPUT
-            echo "has-apps=false" >> $GITHUB_OUTPUT
-          fi
-
-  deploy-app:
-    needs: [detect, set-matrix]
-    if: needs.set-matrix.outputs.has-apps == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.set-matrix.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: false
       - name: Log in to GHCR
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.aios == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.aios == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ${{ matrix.dir }}/Dockerfile
+          file: aios/Dockerfile
           push: true
-          tags: ghcr.io/dpetryshchuk/ai-os/${{ matrix.app }}:latest
+          tags: ghcr.io/dpetryshchuk/ai-os/aios:latest
       - name: Deploy to VPS
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.aios == 'true'
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -120,18 +48,25 @@ jobs:
             set -e
             cd /home/dima/ai-os
             git fetch origin master && git reset --hard origin/master
-            docker compose pull ${{ matrix.app }}
-            docker compose up -d ${{ matrix.app }}
-            if [[ "${{ matrix.app }}" == "aios" ]]; then
-              docker compose up -d celery-worker celery-beat
-            fi
+            docker compose pull aios
+            docker compose up -d aios celery-worker celery-beat
 
   deploy-infra:
-    needs: detect
-    if: needs.detect.outputs.infra == 'true'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name == 'push'
+        with:
+          filters: |
+            infra:
+              - 'docker-compose.yml'
+              - 'caddy/**'
       - name: Deploy infra to VPS
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.infra == 'true'
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -141,5 +76,5 @@ jobs:
             set -e
             cd /home/dima/ai-os
             git fetch origin master && git reset --hard origin/master
-            docker compose up -d postgres redis
+            docker compose up -d --remove-orphans --pull=never || true
             sudo systemctl reload-or-restart caddy
