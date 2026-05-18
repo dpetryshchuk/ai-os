@@ -24,9 +24,14 @@ celery -A tasks worker --loglevel=info
 # Celery beat scheduler (separate terminal)
 celery -A tasks beat --loglevel=info
 
-# Alembic migrations (against JOBSEARCH_DATABASE_URL)
-alembic upgrade head
-alembic revision --autogenerate -m "description"
+# Alembic migrations
+alembic upgrade head                          # jobsearch DB
+alembic -c alembic_daily.ini upgrade head     # daily_log DB
+
+# On fresh VPS, run both — tables already exist so IF NOT EXISTS makes it safe
+# To stamp the current VPS as up to date without re-running:
+alembic stamp head
+alembic -c alembic_daily.ini stamp head
 ```
 
 Local DB queries require an SSH tunnel: `ssh -L 5432:localhost:5432 dima@46.225.78.10`
