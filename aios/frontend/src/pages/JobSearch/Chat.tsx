@@ -172,7 +172,7 @@ export default function Chat() {
             if (!textStarted) { textStarted = true; updateMessage(agentId, m => ({ ...m, text: textContent, thinking: false })) }
             else updateMessage(agentId, m => ({ ...m, text: textContent }))
           } else if (chunk.type === 'tool-call' && chunk.payload) {
-            const { toolCallId, toolName, args } = chunk.payload as ToolCallData
+            const { toolCallId, toolName, args } = chunk.payload as unknown as ToolCallData
             toolCallMap[toolCallId] = { toolCallId, toolName, args, result: undefined }
             updateMessage(agentId, m => ({ ...m, toolCalls: Object.values(toolCallMap) }))
           } else if (chunk.type === 'tool-result' && chunk.payload) {
