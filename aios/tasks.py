@@ -35,7 +35,6 @@ def _import_handlers() -> dict[str, Callable]:
 
 @celery_app.task(name="events.process")
 def process_event(event_id: str) -> None:
-    handlers = _import_handlers()
     with SyncSession() as session:
         event = session.get(OsEvent, event_id)
         if not event:
@@ -44,10 +43,13 @@ def process_event(event_id: str) -> None:
         event.started_at = datetime.utcnow()
         session.commit()
         try:
+            handlers = _import_handlers()
             handler = handlers.get(event.type)
             if handler:
                 payload = event.payload or {}
-                handler(payload, session)
+                result = handler(payload, session)
+                if result is not None:
+                    event.payload = {**(event.payload or {}), "result": result}
             else:
                 raise ValueError(f"No handler for event type: {event.type}")
             event.status = "done"
