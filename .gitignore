@@ -26,3 +26,7 @@ apps/*/frontend/dist/
 
 # visual brainstorming
 .superpowers/
+
+# local-only reference dirs (ignored)
+.external/
+.docs/
