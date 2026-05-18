@@ -24,3 +24,7 @@ jobsearch.dmytropetryshchuk.com {
 write.dmytropetryshchuk.com {
   redir https://home.dmytropetryshchuk.com/writing/essays 302
 }
+
+log.dmytropetryshchuk.com {
+  redir https://home.dmytropetryshchuk.com/daily-log 302
+}
