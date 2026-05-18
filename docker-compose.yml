@@ -84,24 +84,60 @@ services:
       - internal
     restart: unless-stopped
 
-  celery-worker:
-    image: ghcr.io/dpetryshchuk/ai-os/home:latest
-    command: celery -A tasks worker --loglevel=info
+  aios:
+    image: ghcr.io/dpetryshchuk/ai-os/aios:latest
+    ports:
+      - "127.0.0.1:4116:4116"
     environment:
+      PORT: "4116"
+      JOBSEARCH_DATABASE_URL: postgresql://jobsearch:${JOBSEARCH_DB_PASSWORD}@postgres:5432/jobsearch
+      DAILY_LOG_DATABASE_URL: postgresql://daily_log:${DAILY_LOG_DB_PASSWORD}@postgres:5432/daily_log
       REDIS_URL: redis://redis:6379/0
-      JOBSEARCH_URL: http://jobsearch:4111
-      WRITING_APP_URL: http://writing-app:4112
-      DAILY_LOG_URL: http://daily-log:4113
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      UPLOADS_DIR: /app/uploads
+      WRITING_DIR: ${WRITING_DIR:-/repo}
+      FREEWRITE_DIR: ${FREEWRITE_DIR:-/home/dima/freewrite}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      GITHUB_REPO: ${GITHUB_REPO}
+      GIT_AUTHOR_NAME: Dima
+      GIT_AUTHOR_EMAIL: dmytrodim@gmail.com
+      GIT_COMMITTER_NAME: Dima
+      GIT_COMMITTER_EMAIL: dmytrodim@gmail.com
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - jobsearch_uploads:/app/uploads
+      - ${WRITING_DIR:-/tmp/writing}:/repo
+      - ${FREEWRITE_DIR:-/home/dima/freewrite}:/freewrite
+    networks:
+      - internal
+    restart: unless-stopped
+
+  celery-worker:
+    image: ghcr.io/dpetryshchuk/ai-os/aios:latest
+    command: celery -A tasks worker --loglevel=info
+    working_dir: /app
+    environment:
+      JOBSEARCH_DATABASE_URL: postgresql://jobsearch:${JOBSEARCH_DB_PASSWORD}@postgres:5432/jobsearch
+      DAILY_LOG_DATABASE_URL: postgresql://daily_log:${DAILY_LOG_DB_PASSWORD}@postgres:5432/daily_log
+      REDIS_URL: redis://redis:6379/0
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
     depends_on:
       - redis
+      - postgres
     networks:
       - internal
     restart: unless-stopped
 
   celery-beat:
-    image: ghcr.io/dpetryshchuk/ai-os/home:latest
+    image: ghcr.io/dpetryshchuk/ai-os/aios:latest
     command: celery -A tasks beat --loglevel=info
+    working_dir: /app
     environment:
+      JOBSEARCH_DATABASE_URL: postgresql://jobsearch:${JOBSEARCH_DB_PASSWORD}@postgres:5432/jobsearch
       REDIS_URL: redis://redis:6379/0
     depends_on:
       - redis

@@ -37,3 +37,10 @@ log.dmytropetryshchuk.com {
     flush_interval -1
   }
 }
+
+aios.dmytropetryshchuk.com {
+  import auth
+  reverse_proxy localhost:4116 {
+    flush_interval -1
+  }
+}
