@@ -285,7 +285,7 @@ async def agentic_stream(messages: list, pool: asyncpg.Pool) -> AsyncIterator[st
                             tool_calls_acc[idx]["id"] = tc.id
                         if tc.function:
                             if tc.function.name:
-                                tool_calls_acc[idx]["name"] += tc.function.name
+                                tool_calls_acc[idx]["name"] = tc.function.name
                             if tc.function.arguments:
                                 tool_calls_acc[idx]["arguments"] += tc.function.arguments
 

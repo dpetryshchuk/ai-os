@@ -116,6 +116,7 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const activeThinkingRef = useRef(0)
+  const historyRef = useRef<{ role: string; content: string }[]>([])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -153,11 +154,13 @@ export default function Chat() {
       updateMessage(agentId, m => m.thinking ? { ...m, text: THINKING[activeThinkingRef.current] } : m)
     }, 600)
 
+    historyRef.current = [...historyRef.current, { role: 'user', content: text }]
+
     try {
       const res = await fetch(STREAM_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: [{ role: 'user', content: text }] }),
+        body: JSON.stringify({ messages: historyRef.current }),
       })
 
       clearInterval(thinkingInterval)
@@ -214,8 +217,12 @@ export default function Chat() {
         }
       }
       updateMessage(agentId, m => m.thinking ? { ...m, text: textContent, thinking: false } : m)
+      if (textContent) {
+        historyRef.current = [...historyRef.current, { role: 'assistant', content: textContent }]
+      }
     } catch (err) {
       clearInterval(thinkingInterval)
+      historyRef.current = historyRef.current.slice(0, -1)
       const msg = err instanceof Error ? err.message : 'Unknown error'
       updateMessage(agentId, m => ({ ...m, text: `Error: ${msg}`, thinking: false }))
     } finally {
