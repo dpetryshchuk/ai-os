@@ -12,8 +12,8 @@ services:
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
       UPLOADS_DIR: /app/uploads
-      WRITING_DIR: ${WRITING_DIR:-/repo}
-      FREEWRITE_DIR: ${FREEWRITE_DIR:-/home/dima/freewrite}
+      WRITING_DIR: /repo
+      FREEWRITE_DIR: /freewrite
       GITHUB_TOKEN: ${GITHUB_TOKEN}
       GITHUB_REPO: ${GITHUB_REPO}
       GIT_AUTHOR_NAME: Dima
