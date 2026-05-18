@@ -36,6 +36,7 @@ services:
     command: celery -A tasks worker --loglevel=info
     working_dir: /app
     environment:
+      PYTHONPATH: /app
       JOBSEARCH_DATABASE_URL: postgresql://jobsearch:${JOBSEARCH_DB_PASSWORD}@postgres:5432/jobsearch
       DAILY_LOG_DATABASE_URL: postgresql://daily_log:${DAILY_LOG_DB_PASSWORD}@postgres:5432/daily_log
       REDIS_URL: redis://redis:6379/0
