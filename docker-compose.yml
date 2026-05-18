@@ -1,89 +1,4 @@
 services:
-  writing-app:
-    image: ghcr.io/dpetryshchuk/ai-os/writing-app:latest
-    ports:
-      - "127.0.0.1:4112:4112"
-    environment:
-      PORT: "4112"
-      REPO_DIR: /repo
-      CONTENT_DIR: /repo/content/essays
-      FREEWRITE_DIR: /freewrite
-      GITHUB_TOKEN: ${GITHUB_TOKEN}
-      GITHUB_REPO: ${GITHUB_REPO}
-      GIT_AUTHOR_NAME: Dima
-      GIT_AUTHOR_EMAIL: dmytrodim@gmail.com
-      GIT_COMMITTER_NAME: Dima
-      GIT_COMMITTER_EMAIL: dmytrodim@gmail.com
-    volumes:
-      - ${WRITING_DIR:-/tmp/writing}:/repo
-      - ${FREEWRITE_DIR:-/home/dima/freewrite}:/freewrite
-    networks:
-      - internal
-    restart: unless-stopped
-
-  daily-log:
-    image: ghcr.io/dpetryshchuk/ai-os/daily-log:latest
-    ports:
-      - "127.0.0.1:4113:4113"
-    environment:
-      PORT: "4113"
-      DATABASE_URL: postgresql://daily_log:${DAILY_LOG_DB_PASSWORD}@postgres:5432/daily_log
-    depends_on:
-      - postgres
-    networks:
-      - internal
-    restart: unless-stopped
-
-  jobsearch:
-    image: ghcr.io/dpetryshchuk/ai-os/jobsearch:latest
-    ports:
-      - "127.0.0.1:4111:4111"
-    environment:
-      PORT: "4111"
-      DATABASE_URL: postgresql://jobsearch:${JOBSEARCH_DB_PASSWORD}@postgres:5432/jobsearch
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
-      UPLOADS_DIR: /app/uploads
-      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
-      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
-    depends_on:
-      - postgres
-    volumes:
-      - jobsearch_uploads:/app/uploads
-    networks:
-      - internal
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:16-alpine
-    expose:
-      - "5432"
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      DAILY_LOG_DB_PASSWORD: ${DAILY_LOG_DB_PASSWORD}
-      JOBSEARCH_DB_PASSWORD: ${JOBSEARCH_DB_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./postgres/init.sh:/docker-entrypoint-initdb.d/init.sh
-    networks:
-      - internal
-    restart: unless-stopped
-
-  home:
-    image: ghcr.io/dpetryshchuk/ai-os/home:latest
-    ports:
-      - "127.0.0.1:4114:4114"
-    environment:
-      PORT: "4114"
-      REDIS_URL: redis://redis:6379/0
-      JOBSEARCH_URL: http://jobsearch:4111
-      WRITING_APP_URL: http://writing-app:4112
-      DAILY_LOG_URL: http://daily-log:4113
-    depends_on:
-      - redis
-    networks:
-      - internal
-    restart: unless-stopped
-
   aios:
     image: ghcr.io/dpetryshchuk/ai-os/aios:latest
     ports:
@@ -142,6 +57,21 @@ services:
     depends_on:
       - redis
       - celery-worker
+    networks:
+      - internal
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DAILY_LOG_DB_PASSWORD: ${DAILY_LOG_DB_PASSWORD}
+      JOBSEARCH_DB_PASSWORD: ${JOBSEARCH_DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sh:/docker-entrypoint-initdb.d/init.sh
     networks:
       - internal
     restart: unless-stopped

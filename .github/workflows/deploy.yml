@@ -141,4 +141,5 @@ jobs:
             set -e
             cd /home/dima/ai-os
             git fetch origin master && git reset --hard origin/master
-            docker compose up -d caddy postgres redis
+            docker compose up -d postgres redis
+            sudo systemctl reload-or-restart caddy
