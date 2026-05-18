@@ -16,3 +16,11 @@ home.dmytropetryshchuk.com {
     flush_interval -1
   }
 }
+
+jobsearch.dmytropetryshchuk.com {
+  redir https://home.dmytropetryshchuk.com/jobsearch/pipeline 302
+}
+
+write.dmytropetryshchuk.com {
+  redir https://home.dmytropetryshchuk.com/writing/essays 302
+}
