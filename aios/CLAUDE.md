@@ -28,8 +28,7 @@ celery -A tasks beat --loglevel=info
 alembic upgrade head                          # jobsearch DB
 alembic -c alembic_daily.ini upgrade head     # daily_log DB
 
-# On fresh VPS, run both — tables already exist so IF NOT EXISTS makes it safe
-# To stamp the current VPS as up to date without re-running:
+# Mark existing VPS as up to date without re-running migrations
 alembic stamp head
 alembic -c alembic_daily.ini stamp head
 ```
@@ -48,7 +47,7 @@ Browser → Caddy (home.dmytropetryshchuk.com, basicauth)
                         Redis ← celery-worker + celery-beat
 ```
 
-**Two separate Postgres databases**: `JOBSEARCH_DATABASE_URL` and `DAILY_LOG_DATABASE_URL`. They are never merged — this avoids a risky migration and keeps existing data intact.
+**Two separate Postgres databases**: `JOBSEARCH_DATABASE_URL` and `DAILY_LOG_DATABASE_URL`. Kept separate to preserve existing data — never merged.
 
 **Event-driven workers**: Every task (scraper, health check) runs via `os_events` → Celery. UI triggers go through `POST /api/jobsearch/trigger/{task_type}` → `events.create()` → `process_event.delay(event_id)`.
 
@@ -70,7 +69,10 @@ Browser → Caddy (home.dmytropetryshchuk.com, basicauth)
 | `routers/webhooks.py` | `/webhooks/*` (future) |
 | `workers/health.py` | `run(payload, session)` — pings all app health endpoints |
 | `workers/scrapers/*.py` | `run(payload, session)` — YC, HN, RemoteOK, Simplify |
-| `alembic/` | Alembic env + migration for `os_events` table |
+| `alembic/` | Alembic env + migrations for `jobsearch` DB |
+| `alembic.ini` | Alembic config for jobsearch DB |
+| `alembic_daily/` | Alembic env + migrations for `daily_log` DB |
+| `alembic_daily.ini` | Alembic config for daily_log DB |
 | `tests/` | pytest test suite |
 | `frontend/` | React 19 + Vite + Tailwind SPA |
 
@@ -170,22 +172,26 @@ Beat schedule (UTC):
 
 ### jobsearch DB (`JOBSEARCH_DATABASE_URL`)
 
-Schema in `apps/jobsearch/db/schema.sql`. Key tables:
+Managed by Alembic (`alembic/`). Migrations:
+- `0001_create_os_events.py` — `os_events` table
+- `0002_create_jobsearch_schema.py` — all CRM tables
 
 ```
 companies       id (hex16), name, website
 contacts        id, name, company_id, role, source, stage, notes
                 stage: Outreached → Responded → Ongoing → Dead
 interactions    id, contact_id, date, direction (out/in), notes
-job_postings    id, company_id, title, link, source, status (new/applied/dropped), resume_path
+job_postings    id, company_id, title, link, source, status (new/applied/dropped),
+                resume_path, scraped_date, description
 content_posts   id, posted_date, content, impressions, engagements, comments
 notes           id, category, title, url, content, created_at
 os_events       id, source, type, status, payload, error, created_at, started_at, completed_at
 ```
 
-The `os_events` table is created by Alembic: `alembic/versions/0001_create_os_events.py`.
-
 ### daily_log DB (`DAILY_LOG_DATABASE_URL`)
+
+Managed by Alembic (`alembic_daily/`). Migrations:
+- `0001_create_daily_log_schema.py` — all three tables
 
 ```
 habit_types   id (serial), name, kind (boolean|number), active, created_at
@@ -204,8 +210,8 @@ habit_logs    habit_type_id + date (PK), value (jsonb)
 | `LANGFUSE_PUBLIC_KEY` | `""` | Optional LLM observability |
 | `LANGFUSE_SECRET_KEY` | `""` | Optional LLM observability |
 | `UPLOADS_DIR` | `/app/uploads` | Resume upload storage |
-| `WRITING_DIR` | `/repo` | Git repo for essays |
-| `FREEWRITE_DIR` | `/freewrite` | Directory for freewrite entries |
+| `WRITING_DIR` | `/repo` | Git repo for essays (container-internal path) |
+| `FREEWRITE_DIR` | `/freewrite` | Directory for freewrite entries (container-internal path) |
 | `GITHUB_TOKEN` | `""` | For git push from writing app |
 | `GITHUB_REPO` | `""` | `owner/repo` for writing git push |
 
@@ -232,19 +238,22 @@ All pages use the pattern: `fetch('/api/...')` → `.then(d => d.data ?? [])` (r
 
 ## Deploy
 
-Push to `master` → GitHub Actions detects `aios/**` changes → builds Docker image → pushes to `ghcr.io/dpetryshchuk/ai-os/aios:latest` → SSH to VPS → `docker compose pull aios && docker compose up -d aios && docker compose up -d celery-worker celery-beat`.
+Push to `master` → GitHub Actions detects `aios/**` changes → builds Docker image → pushes to `ghcr.io/dpetryshchuk/ai-os/aios:latest` → SSH to VPS → `docker compose pull aios && docker compose up -d aios celery-worker celery-beat`.
 
 VPS path: `/home/dima/ai-os/` — `docker-compose.yml` at root.
 
-Full ops guide: `docs/VPS-GUIDE.md`
+### Running migrations on the VPS
 
-### First deploy checklist
+On a **fresh VPS** (new databases), run both:
+```bash
+ssh dima@46.225.78.10
+cd ai-os
+docker compose exec aios alembic upgrade head
+docker compose exec aios alembic -c alembic_daily.ini upgrade head
+```
 
-1. Add DNS A record `home.dmytropetryshchuk.com → 46.225.78.10`
-2. Run Alembic migration on VPS to create `os_events` table:
-   ```bash
-   ssh dima@46.225.78.10
-   cd ai-os
-   docker compose exec aios alembic upgrade head
-   ```
-3. Verify `caddy/auth_credentials` exists on VPS (shared with other apps)
+On an **existing VPS** where tables already exist (IF NOT EXISTS makes it safe to run, but stamp is cleaner):
+```bash
+docker compose exec aios alembic stamp head
+docker compose exec aios alembic -c alembic_daily.ini stamp head
+```
