@@ -31,8 +31,8 @@ services:
       - internal
     restart: unless-stopped
 
-  proposals:
-    image: ghcr.io/dpetryshchuk/ai-os/proposals:latest
+  onekeyflow:
+    image: ghcr.io/dpetryshchuk/ai-os/onekeyflow:latest
     ports:
       - "127.0.0.1:4117:4117"
     environment:
