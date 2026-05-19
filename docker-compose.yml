@@ -49,7 +49,7 @@ services:
 
   onekeyflow-worker:
     image: ghcr.io/dpetryshchuk/ai-os/onekeyflow:latest
-    command: celery -A tasks worker --loglevel=info
+    command: celery -A tasks worker --loglevel=info -Q okf
     working_dir: /app
     environment:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
