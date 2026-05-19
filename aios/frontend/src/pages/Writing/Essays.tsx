@@ -1,8 +1,10 @@
-import { useReducer, useEffect, useRef, useCallback } from 'react'
+import { useReducer, useEffect, useRef, useCallback, useState } from 'react'
 import { EditorView, minimalSetup } from 'codemirror'
 import { markdown } from '@codemirror/lang-markdown'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { ChevronDown, ChevronRight, Plus, Trash2, MoreHorizontal, ArrowLeft, GitBranch, FolderPlus } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 // ──── Types ────────────────────────────────────────────────────────────────
 
@@ -12,6 +14,18 @@ interface Frontmatter {
   description?: string; toc?: boolean; [key: string]: unknown
 }
 interface EssayData { frontmatter: Frontmatter; body: string }
+
+// ──── Hooks ────────────────────────────────────────────────────────────────
+
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth < 768)
+  useEffect(() => {
+    const fn = () => setMobile(window.innerWidth < 768)
+    window.addEventListener('resize', fn)
+    return () => window.removeEventListener('resize', fn)
+  }, [])
+  return mobile
+}
 
 // ──── API ──────────────────────────────────────────────────────────────────
 
@@ -53,34 +67,260 @@ const api = {
   },
 }
 
-// ──── FrontmatterBar ───────────────────────────────────────────────────────
+// ──── List panel ───────────────────────────────────────────────────────────
+
+interface ListPanelProps {
+  folders: string[]
+  essays: Essay[]
+  activeFolder: string | null
+  activeSlug: string | null
+  commitMessage: string
+  onSelectEssay: (folder: string, slug: string) => void
+  onCreateEssay: (folder: string, title: string) => void
+  onDeleteEssay: (folder: string, slug: string) => void
+  onMoveEssay: (folder: string, slug: string, targetFolder: string) => void
+  onCreateFolder: (name: string) => void
+  onRenameFolder: (oldName: string, newName: string) => void
+  onDeleteFolder: (name: string) => void
+  onPull: () => void
+  onCommitMessageChange: (msg: string) => void
+  onPush: () => void
+}
+
+function ListPanel({
+  folders, essays, activeFolder, activeSlug, commitMessage,
+  onSelectEssay, onCreateEssay, onDeleteEssay, onMoveEssay,
+  onCreateFolder, onRenameFolder, onDeleteFolder,
+  onPull, onCommitMessageChange, onPush,
+}: ListPanelProps) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
+  const [newEssayFolder, setNewEssayFolder] = useState<string | null>(null)
+  const [newEssayTitle, setNewEssayTitle] = useState('')
+  const [newFolderMode, setNewFolderMode] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
+
+  const toggle = (folder: string) =>
+    setCollapsed(s => ({ ...s, [folder]: !s[folder] }))
+
+  const essaysIn = (folder: string) => essays.filter(e => e.folder === folder)
+
+  const handleFolderMenu = (folder: string) => {
+    const action = window.prompt(`"${folder}": type rename or delete`)?.toLowerCase()
+    if (!action) return
+    if (action === 'delete') {
+      if (essaysIn(folder).length > 0) return alert('Delete all essays in this folder first.')
+      if (confirm(`Delete folder "${folder}"?`)) onDeleteFolder(folder)
+    } else if (action === 'rename') {
+      const n = window.prompt('New name:', folder)
+      if (n && n.trim() && n.trim() !== folder) onRenameFolder(folder, n.trim())
+    }
+  }
+
+  const handleEssayMenu = (essay: Essay) => {
+    const action = window.prompt(`"${essay.title || essay.slug}": type move or delete`)?.toLowerCase()
+    if (!action) return
+    if (action === 'delete') {
+      if (confirm('Delete this essay?')) onDeleteEssay(essay.folder, essay.slug)
+    } else if (action === 'move') {
+      const t = window.prompt('Move to folder:', essay.folder)
+      if (t && t.trim() && t.trim() !== essay.folder) onMoveEssay(essay.folder, essay.slug, t.trim())
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
+        <span className="text-[10px] tracking-[0.1em] text-muted-foreground font-semibold uppercase">Essays</span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onPull}
+            title="Pull from GitHub"
+            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <GitBranch className="size-3.5" />
+          </button>
+          <button
+            onClick={() => setNewFolderMode(true)}
+            title="New folder"
+            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <FolderPlus className="size-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* List */}
+      <div className="flex-1 overflow-y-auto py-1">
+        {newFolderMode && (
+          <input
+            autoFocus
+            value={newFolderName}
+            onChange={e => setNewFolderName(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                if (newFolderName.trim()) onCreateFolder(newFolderName.trim())
+                setNewFolderMode(false); setNewFolderName('')
+              }
+              if (e.key === 'Escape') { setNewFolderMode(false); setNewFolderName('') }
+            }}
+            onBlur={() => { setNewFolderMode(false); setNewFolderName('') }}
+            placeholder="Folder name…"
+            className="mx-3 mb-1 w-[calc(100%-24px)] bg-background border border-border rounded-md px-2.5 py-1.5 text-xs outline-none"
+          />
+        )}
+
+        {folders.map(folder => {
+          const isOpen = !collapsed[folder]
+          const folderEssays = essaysIn(folder)
+          return (
+            <div key={folder}>
+              {/* Folder row */}
+              <div className="flex items-center px-2 py-1 group">
+                <button
+                  onClick={() => toggle(folder)}
+                  className="flex items-center gap-1 flex-1 min-w-0 py-1 text-left"
+                >
+                  {isOpen
+                    ? <ChevronDown className="size-3 text-muted-foreground shrink-0" />
+                    : <ChevronRight className="size-3 text-muted-foreground shrink-0" />}
+                  <span className="text-xs font-medium text-muted-foreground group-hover:text-foreground truncate transition-colors ml-0.5">
+                    {folder}
+                  </span>
+                </button>
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 md:flex transition-opacity">
+                  <button
+                    onClick={() => { setNewEssayFolder(folder); setNewEssayTitle(''); setCollapsed(s => ({ ...s, [folder]: false })) }}
+                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    title="New essay"
+                  >
+                    <Plus className="size-3" />
+                  </button>
+                  <button
+                    onClick={() => handleFolderMenu(folder)}
+                    className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                    title="Folder actions"
+                  >
+                    <MoreHorizontal className="size-3" />
+                  </button>
+                </div>
+                {/* Always visible on mobile */}
+                <div className="flex items-center gap-0.5 md:hidden">
+                  <button
+                    onClick={() => { setNewEssayFolder(folder); setNewEssayTitle(''); setCollapsed(s => ({ ...s, [folder]: false })) }}
+                    className="p-1.5 rounded text-muted-foreground hover:text-foreground"
+                  >
+                    <Plus className="size-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Essays */}
+              {isOpen && (
+                <div>
+                  {folderEssays.map(essay => (
+                    <div
+                      key={essay.slug}
+                      className={cn(
+                        'group flex items-center pl-6 pr-2 py-2 cursor-pointer transition-colors',
+                        activeFolder === essay.folder && activeSlug === essay.slug
+                          ? 'bg-muted/60 border-l-2 border-foreground'
+                          : 'hover:bg-muted/30 border-l-2 border-transparent',
+                      )}
+                    >
+                      <button
+                        onClick={() => onSelectEssay(essay.folder, essay.slug)}
+                        className="flex-1 text-left min-w-0"
+                      >
+                        <span className={cn(
+                          'text-[12.5px] truncate block transition-colors',
+                          activeFolder === essay.folder && activeSlug === essay.slug
+                            ? 'text-foreground font-medium'
+                            : 'text-muted-foreground group-hover:text-foreground',
+                        )}>
+                          {essay.title || essay.slug}
+                        </span>
+                      </button>
+                      {/* Delete — hover on desktop, always on mobile */}
+                      <button
+                        onClick={() => handleEssayMenu(essay)}
+                        className="p-1.5 rounded text-muted-foreground hover:text-destructive transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 shrink-0"
+                        title="Essay actions"
+                      >
+                        <MoreHorizontal className="size-3.5" />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Inline new essay input */}
+                  {newEssayFolder === folder && (
+                    <input
+                      autoFocus
+                      value={newEssayTitle}
+                      onChange={e => setNewEssayTitle(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          if (newEssayTitle.trim()) onCreateEssay(folder, newEssayTitle.trim())
+                          setNewEssayFolder(null); setNewEssayTitle('')
+                        }
+                        if (e.key === 'Escape') { setNewEssayFolder(null); setNewEssayTitle('') }
+                      }}
+                      onBlur={() => { setNewEssayFolder(null); setNewEssayTitle('') }}
+                      placeholder="Essay title…"
+                      className="ml-6 mr-3 my-1 w-[calc(100%-36px)] bg-background border border-border rounded px-2 py-1.5 text-xs outline-none"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Git footer */}
+      <div className="border-t border-border p-3 shrink-0">
+        <input
+          value={commitMessage}
+          onChange={e => onCommitMessageChange(e.target.value)}
+          placeholder="Commit message…"
+          className="w-full bg-background border border-border rounded-md px-2.5 py-2 text-[11.5px] font-mono text-muted-foreground outline-none mb-2 placeholder:text-muted-foreground"
+        />
+        <button
+          onClick={onPush}
+          className="w-full bg-foreground text-background rounded-md px-2 py-2 text-[11.5px] font-medium hover:opacity-90 transition-opacity"
+        >
+          ↑ Push to GitHub
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ──── Frontmatter bar ──────────────────────────────────────────────────────
 
 function FrontmatterBar({ frontmatter, onChange }: { frontmatter: Frontmatter | null; onChange: (fm: Frontmatter) => void }) {
-  const [addingTag, setAddingTag] = [false, () => {}]
   if (!frontmatter) return null
   const { title = '', tags = [], status = 'in-progress', date = '' } = frontmatter
   const update = (patch: Partial<Frontmatter>) => onChange({ ...frontmatter, ...patch })
   return (
-    <div className="border-b border-border bg-background shrink-0">
-      <div className="px-6 py-3 flex gap-4 items-center flex-wrap">
-        <input
-          value={title}
-          onChange={e => update({ title: e.target.value })}
-          className="bg-transparent text-base font-semibold outline-none flex-1 min-w-[160px] placeholder:text-muted-foreground"
-          placeholder="Untitled"
-        />
-        <div className="flex gap-1.5 items-center flex-wrap">
-          {tags.map(tag => (
-            <span key={tag} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-              {tag}
-              <button onClick={() => update({ tags: tags.filter(t => t !== tag) })} className="leading-none hover:text-foreground">×</button>
-            </span>
-          ))}
-        </div>
+    <div className="border-b border-border bg-background shrink-0 px-4 py-2.5 flex flex-wrap gap-3 items-center">
+      <input
+        value={title}
+        onChange={e => update({ title: e.target.value })}
+        className="bg-transparent text-sm font-semibold outline-none flex-1 min-w-[140px] placeholder:text-muted-foreground"
+        placeholder="Untitled"
+      />
+      <div className="flex items-center gap-2 flex-wrap">
+        {tags.map(tag => (
+          <span key={tag} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+            {tag}
+            <button onClick={() => update({ tags: tags.filter(t => t !== tag) })} className="leading-none hover:text-foreground">×</button>
+          </span>
+        ))}
         <select
           value={status}
           onChange={e => update({ status: e.target.value })}
-          className="bg-muted text-muted-foreground text-[11px] rounded-full px-3 py-1 outline-none cursor-pointer"
+          className="bg-muted text-muted-foreground text-[11px] rounded-full px-2.5 py-1 outline-none cursor-pointer"
         >
           <option value="in-progress">in progress</option>
           <option value="published">published</option>
@@ -91,177 +331,7 @@ function FrontmatterBar({ frontmatter, onChange }: { frontmatter: Frontmatter | 
   )
 }
 
-// ──── Sidebar ──────────────────────────────────────────────────────────────
-
-interface SidebarProps {
-  folders: string[]
-  essays: Essay[]
-  activeFolder: string | null
-  activeSlug: string | null
-  onSelectEssay: (folder: string, slug: string) => void
-  onCreateEssay: (folder: string, title: string) => void
-  onDeleteEssay: (folder: string, slug: string) => void
-  onMoveEssay: (folder: string, slug: string, targetFolder: string) => void
-  onCreateFolder: (name: string) => void
-  onRenameFolder: (oldName: string, newName: string) => void
-  onDeleteFolder: (name: string) => void
-  onPull: () => void
-  commitMessage: string
-  onCommitMessageChange: (msg: string) => void
-  onPush: () => void
-}
-
-function Sidebar({
-  folders, essays, activeFolder, activeSlug,
-  onSelectEssay, onCreateEssay, onDeleteEssay, onMoveEssay,
-  onCreateFolder, onRenameFolder, onDeleteFolder,
-  onPull, commitMessage, onCommitMessageChange, onPush,
-}: SidebarProps) {
-  const [collapsed, setCollapsed] = useReducer(
-    (s: Record<string, boolean>, folder: string) => ({ ...s, [folder]: !s[folder] }),
-    {}
-  )
-  const [inlineNewFolder, setInlineNewFolder] = useReducer(
-    (_: string | null, f: string | null) => f, null
-  )
-  const [newTitle, setNewTitle] = useReducer((_: string, t: string) => t, '')
-  const [renamingFolder, setRenamingFolder] = useReducer((_: string | null, f: string | null) => f, null)
-  const [renameValue, setRenameValue] = useReducer((_: string, v: string) => v, '')
-  const [newFolderMode, setNewFolderMode] = useReducer((_: boolean, v: boolean) => v, false)
-  const [newFolderName, setNewFolderName] = useReducer((_: string, v: string) => v, '')
-
-  const essaysIn = (folder: string) => essays.filter(e => e.folder === folder)
-
-  return (
-    <div className="w-[220px] bg-background border-r border-border flex flex-col shrink-0 select-none overflow-hidden">
-      <div className="px-4 py-3 border-b border-border flex items-center justify-between shrink-0">
-        <span className="text-[10px] tracking-[0.1em] text-muted-foreground font-semibold uppercase">Essays</span>
-        <div className="flex gap-2.5 items-center">
-          <button onClick={onPull} title="Pull" className="text-muted-foreground hover:text-foreground text-sm transition-colors">↓</button>
-          <button onClick={() => setNewFolderMode(true)} title="New folder" className="text-muted-foreground hover:text-foreground text-base transition-colors">+</button>
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto py-2">
-        {newFolderMode && (
-          <input
-            autoFocus
-            value={newFolderName}
-            onChange={e => setNewFolderName(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') { if (newFolderName.trim()) onCreateFolder(newFolderName.trim()); setNewFolderMode(false) }
-              if (e.key === 'Escape') setNewFolderMode(false)
-            }}
-            onBlur={() => setNewFolderMode(false)}
-            placeholder="folder name"
-            className="mx-3 mb-1 w-[calc(100%-24px)] bg-background border border-border rounded-md px-2.5 py-1.5 text-xs outline-none"
-          />
-        )}
-        {folders.map(folder => {
-          const isOpen = !collapsed[folder]
-          const folderEssays = essaysIn(folder)
-          return (
-            <div key={folder}>
-              <div
-                role="button" tabIndex={0}
-                className="px-3 py-1.5 flex items-center gap-1.5 cursor-pointer group"
-                onClick={() => setCollapsed(folder)}
-                onKeyDown={e => { if (e.key === 'Enter') setCollapsed(folder) }}
-                onContextMenu={e => {
-                  e.preventDefault()
-                  const action = window.prompt(`${folder}: rename/delete/new?`)?.toLowerCase()
-                  if (!action) return
-                  if (action === 'delete') { if (folderEssays.length === 0 && confirm(`Delete "${folder}"?`)) onDeleteFolder(folder) }
-                  else if (action === 'rename') { const n = prompt('New name:', folder); if (n && n !== folder) onRenameFolder(folder, n) }
-                  else if (action === 'new') setInlineNewFolder(folder)
-                }}
-              >
-                <span className="text-[9px] text-muted-foreground w-3 shrink-0">{isOpen ? '▾' : '▸'}</span>
-                {renamingFolder === folder ? (
-                  <input
-                    autoFocus
-                    value={renameValue}
-                    onChange={e => setRenameValue(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') { if (renameValue.trim() && renameValue !== folder) onRenameFolder(folder, renameValue.trim()); setRenamingFolder(null) }
-                      if (e.key === 'Escape') setRenamingFolder(null)
-                    }}
-                    onBlur={() => setRenamingFolder(null)}
-                    onClick={e => e.stopPropagation()}
-                    className="flex-1 bg-background border border-border rounded px-1.5 py-0.5 text-xs outline-none"
-                  />
-                ) : (
-                  <span className="text-xs text-muted-foreground group-hover:text-foreground flex-1 font-medium transition-colors">{folder}</span>
-                )}
-                <button
-                  onClick={e => { e.stopPropagation(); setInlineNewFolder(folder); setNewTitle('') }}
-                  className="text-muted-foreground hover:text-foreground text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity"
-                >+</button>
-              </div>
-              {isOpen && (
-                <div>
-                  {folderEssays.map(essay => (
-                    <div
-                      key={essay.slug}
-                      role="button" tabIndex={0}
-                      className={`pl-7 pr-3 py-1.5 text-[12.5px] cursor-pointer transition-colors ${
-                        activeFolder === essay.folder && activeSlug === essay.slug
-                          ? 'text-foreground bg-muted/60 border-l-2 border-foreground font-medium'
-                          : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
-                      }`}
-                      onClick={() => onSelectEssay(essay.folder, essay.slug)}
-                      onKeyDown={e => { if (e.key === 'Enter') onSelectEssay(essay.folder, essay.slug) }}
-                      onContextMenu={e => {
-                        e.preventDefault()
-                        const action = window.prompt(`"${essay.title || essay.slug}": move/delete?`)?.toLowerCase()
-                        if (!action) return
-                        if (action === 'delete') { if (confirm(`Delete?`)) onDeleteEssay(essay.folder, essay.slug) }
-                        else if (action === 'move') { const t = prompt('Move to folder:'); if (t && t !== essay.folder) onMoveEssay(essay.folder, essay.slug, t) }
-                      }}
-                    >
-                      {essay.title || essay.slug}
-                    </div>
-                  ))}
-                  {inlineNewFolder === folder && (
-                    <input
-                      autoFocus
-                      value={newTitle}
-                      onChange={e => setNewTitle(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') { if (newTitle.trim()) onCreateEssay(folder, newTitle.trim()); setInlineNewFolder(null) }
-                        if (e.key === 'Escape') setInlineNewFolder(null)
-                      }}
-                      onBlur={() => setInlineNewFolder(null)}
-                      placeholder="Essay title…"
-                      className="ml-7 mr-3 my-0.5 w-[calc(100%-52px)] bg-background border border-border rounded px-2 py-1 text-xs outline-none"
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="border-t border-border p-3 shrink-0">
-        <input
-          value={commitMessage}
-          onChange={e => onCommitMessageChange(e.target.value)}
-          placeholder="commit message…"
-          className="w-full bg-background border border-border rounded-md px-2.5 py-1.5 text-[11.5px] font-mono text-muted-foreground outline-none mb-2 placeholder:text-muted-foreground"
-        />
-        <button
-          onClick={onPush}
-          className="w-full bg-foreground text-background rounded-md px-2 py-1.5 text-[11.5px] font-medium cursor-pointer hover:opacity-90 transition-opacity"
-        >
-          ↑ Push to GitHub
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ──── Editor ───────────────────────────────────────────────────────────────
+// ──── Editor panel ─────────────────────────────────────────────────────────
 
 type SaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
 type ViewMode = 'edit' | 'split' | 'preview'
@@ -271,25 +341,23 @@ function renderMarkdown(text: string): string {
 }
 
 interface EditorPanelProps {
-  folder: string; slug: string; initialBody: string
+  folder: string
+  slug: string
+  title: string
+  initialBody: string
   frontmatterRef: React.RefObject<Frontmatter | null>
   bodyRef: React.MutableRefObject<string>
+  isMobile: boolean
+  onBack: () => void
 }
 
-function EditorPanel({ folder, slug, initialBody, frontmatterRef, bodyRef }: EditorPanelProps) {
+function EditorPanel({ folder, slug, title, initialBody, frontmatterRef, bodyRef, isMobile, onBack }: EditorPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [saveStatus, setSaveStatus] = useReducer((_: SaveStatus, s: SaveStatus) => s, 'idle' as SaveStatus)
-  const [lastSaved, setLastSaved] = useReducer((_: number | null, n: number | null) => n, null as number | null)
-  const [mode, setMode] = useReducer((_: ViewMode, m: ViewMode) => m, 'edit' as ViewMode)
-  const [previewHtml, setPreviewHtml] = useReducer((_: string, s: string) => s, renderMarkdown(initialBody))
-  const [narrow, setNarrow] = useReducer((_: boolean, b: boolean) => b, window.innerWidth < 768)
-
-  useEffect(() => {
-    const handler = () => setNarrow(window.innerWidth < 768)
-    window.addEventListener('resize', handler)
-    return () => window.removeEventListener('resize', handler)
-  }, [])
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const [lastSaved, setLastSaved] = useState<number | null>(null)
+  const [mode, setMode] = useState<ViewMode>('edit')
+  const [previewHtml, setPreviewHtml] = useState(() => renderMarkdown(initialBody))
 
   useEffect(() => {
     setSaveStatus('idle'); setLastSaved(null); setPreviewHtml(renderMarkdown(initialBody))
@@ -305,7 +373,8 @@ function EditorPanel({ folder, slug, initialBody, frontmatterRef, bodyRef }: Edi
           if (!update.docChanged) return
           const value = update.state.doc.toString()
           bodyRef.current = value
-          setSaveStatus('unsaved'); setPreviewHtml(renderMarkdown(value))
+          setSaveStatus('unsaved')
+          setPreviewHtml(renderMarkdown(value))
           if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
           saveTimerRef.current = setTimeout(async () => {
             setSaveStatus('saving')
@@ -318,7 +387,15 @@ function EditorPanel({ folder, slug, initialBody, frontmatterRef, bodyRef }: Edi
       ],
       parent: containerRef.current,
     })
-    return () => { view.destroy(); if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+    return () => {
+      // flush unsaved on unmount
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current)
+        if (frontmatterRef.current && bodyRef.current)
+          api.essays.write(folder, slug, frontmatterRef.current, bodyRef.current).catch(() => {})
+      }
+      view.destroy()
+    }
   }, [folder, slug])
 
   const statusText: Record<SaveStatus, string> = {
@@ -327,38 +404,56 @@ function EditorPanel({ folder, slug, initialBody, frontmatterRef, bodyRef }: Edi
     error: 'Save failed',
   }
 
-  const effectiveMode = narrow && mode === 'split' ? 'edit' : mode
+  // On mobile only show Edit/Preview, not Split
+  const availableModes: ViewMode[] = isMobile ? ['edit', 'preview'] : ['edit', 'split', 'preview']
+  const effectiveMode = (isMobile && mode === 'split') ? 'edit' : mode
   const showEditor = effectiveMode !== 'preview'
   const showPreview = effectiveMode !== 'edit'
-  const modes: ViewMode[] = narrow ? ['edit', 'preview'] : ['edit', 'split', 'preview']
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-2 border-b border-border shrink-0">
-        <span className="text-[11px] text-muted-foreground">{statusText[saveStatus]}</span>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border shrink-0">
+        {isMobile && (
+          <button
+            onClick={onBack}
+            className="p-1.5 -ml-1 rounded text-muted-foreground hover:text-foreground transition-colors mr-1"
+          >
+            <ArrowLeft className="size-4" />
+          </button>
+        )}
+        {isMobile && (
+          <span className="text-sm font-medium flex-1 truncate">{title || 'Untitled'}</span>
+        )}
+        <span className={cn('text-[11px] text-muted-foreground', isMobile ? '' : 'flex-1')}>
+          {statusText[effectiveMode === 'edit' ? saveStatus : 'idle']}
+        </span>
         <div className="flex gap-0.5 rounded-md border border-border p-0.5">
-          {modes.map(m => (
+          {availableModes.map(m => (
             <button
               key={m}
               onClick={() => setMode(m)}
-              className={`px-2.5 py-1 text-[10px] rounded font-medium capitalize transition-colors ${
-                effectiveMode === m ? 'bg-muted text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-              }`}
+              className={cn(
+                'px-2.5 py-1 text-[10px] rounded font-medium capitalize transition-colors',
+                effectiveMode === m ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
             >
               {m}
             </button>
           ))}
         </div>
       </div>
-      <div className="flex-1 overflow-hidden flex">
+
+      {/* Content */}
+      <div className="flex-1 overflow-hidden flex min-h-0">
         <div
           ref={containerRef}
+          className={cn('overflow-y-auto', showEditor && showPreview ? 'w-1/2 border-r border-border' : 'w-full')}
           style={{ display: showEditor ? undefined : 'none' }}
-          className={`overflow-y-auto ${showEditor && showPreview ? 'w-1/2 border-r border-border' : 'w-full'}`}
         />
         {showPreview && (
           <div
-            className={`overflow-y-auto px-8 py-6 prose prose-sm prose-neutral max-w-none ${showEditor ? 'w-1/2' : 'w-full'}`}
+            className={cn('overflow-y-auto px-6 py-5 prose prose-sm prose-neutral max-w-none', showEditor ? 'w-1/2' : 'w-full')}
             dangerouslySetInnerHTML={{ __html: previewHtml }}
           />
         )}
@@ -396,6 +491,9 @@ function appReducer(state: AppState, action: AppAction): AppState {
 // ──── Page ─────────────────────────────────────────────────────────────────
 
 export default function Essays() {
+  const isMobile = useIsMobile()
+  const [panel, setPanel] = useState<'list' | 'editor'>('list')
+
   const [state, dispatch] = useReducer(appReducer, {
     folders: [], essays: [], activeFolder: null, activeSlug: null, essay: null, commitMessage: '',
   })
@@ -415,6 +513,7 @@ export default function Essays() {
     dispatch({ type: 'select_essay', folder, slug, data })
     frontmatterRef.current = data.frontmatter
     bodyRef.current = data.body
+    if (isMobile) setPanel('editor')
   }
 
   function handleFrontmatterChange(fm: Frontmatter) {
@@ -431,55 +530,92 @@ export default function Essays() {
   }
 
   async function handleDeleteEssay(folder: string, slug: string) {
-    try {
-      await api.essays.delete(folder, slug)
-      if (activeFolder === folder && activeSlug === slug) dispatch({ type: 'deselect_essay' })
-      await loadList()
-    } catch (e) { alert(`Delete failed: ${(e as Error).message}`) }
+    await api.essays.delete(folder, slug)
+    if (activeFolder === folder && activeSlug === slug) {
+      dispatch({ type: 'deselect_essay' })
+      if (isMobile) setPanel('list')
+    }
+    await loadList()
   }
 
   async function handleMoveEssay(folder: string, slug: string, targetFolder: string) {
-    try {
-      await api.essays.move(folder, slug, targetFolder)
-      await loadList()
-      if (activeFolder === folder && activeSlug === slug) dispatch({ type: 'move_essay', folder: targetFolder })
-    } catch (e) { alert(`Move failed: ${(e as Error).message}`) }
+    await api.essays.move(folder, slug, targetFolder)
+    await loadList()
+    if (activeFolder === folder && activeSlug === slug)
+      dispatch({ type: 'move_essay', folder: targetFolder })
   }
 
+  const listPanel = (
+    <ListPanel
+      folders={folders} essays={essays}
+      activeFolder={activeFolder} activeSlug={activeSlug}
+      commitMessage={commitMessage}
+      onSelectEssay={selectEssay}
+      onCreateEssay={handleCreateEssay}
+      onDeleteEssay={async (f, s) => { try { await handleDeleteEssay(f, s) } catch (e) { alert((e as Error).message) } }}
+      onMoveEssay={async (f, s, t) => { try { await handleMoveEssay(f, s, t) } catch (e) { alert((e as Error).message) } }}
+      onCreateFolder={async (name) => { try { await api.folders.create(name); await loadList() } catch (e) { alert((e as Error).message) } }}
+      onRenameFolder={async (old, n) => {
+        try {
+          await api.folders.rename(old, n)
+          if (activeFolder === old) dispatch({ type: 'move_essay', folder: n })
+          await loadList()
+        } catch (e) { alert((e as Error).message) }
+      }}
+      onDeleteFolder={async (name) => { try { await api.folders.delete(name); await loadList() } catch (e) { alert((e as Error).message) } }}
+      onPull={async () => { try { const out = await api.git.pull(); alert(out || 'Pulled.'); await loadList() } catch (e) { alert((e as Error).message) } }}
+      onCommitMessageChange={msg => dispatch({ type: 'set_commit', message: msg })}
+      onPush={async () => {
+        if (!commitMessage.trim()) return alert('Enter a commit message first.')
+        try { const out = await api.git.push(commitMessage); alert(out || 'Pushed.'); dispatch({ type: 'set_commit', message: '' }) }
+        catch (e) { alert((e as Error).message) }
+      }}
+    />
+  )
+
+  const editorPanel = essay && activeFolder && activeSlug ? (
+    <div className="flex flex-col h-full overflow-hidden">
+      <FrontmatterBar frontmatter={essay.frontmatter} onChange={handleFrontmatterChange} />
+      <EditorPanel
+        folder={activeFolder} slug={activeSlug}
+        title={essay.frontmatter.title || activeSlug}
+        initialBody={essay.body}
+        frontmatterRef={frontmatterRef} bodyRef={bodyRef}
+        isMobile={isMobile}
+        onBack={() => setPanel('list')}
+      />
+    </div>
+  ) : (
+    <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground">
+      <p className="text-sm">Select an essay or create a new one</p>
+      {isMobile && (
+        <button
+          onClick={() => setPanel('list')}
+          className="flex items-center gap-1.5 text-sm text-foreground border border-border rounded-lg px-4 py-2"
+        >
+          <ArrowLeft className="size-4" /> Browse essays
+        </button>
+      )}
+    </div>
+  )
+
+  // Mobile: one panel at a time
+  if (isMobile) {
+    return (
+      <div className="h-full overflow-hidden">
+        {panel === 'list' ? listPanel : editorPanel}
+      </div>
+    )
+  }
+
+  // Desktop: side by side
   return (
     <div className="flex h-full overflow-hidden">
-      <Sidebar
-        folders={folders} essays={essays}
-        activeFolder={activeFolder} activeSlug={activeSlug}
-        onSelectEssay={selectEssay} onCreateEssay={handleCreateEssay}
-        onDeleteEssay={handleDeleteEssay} onMoveEssay={handleMoveEssay}
-        onCreateFolder={async (name) => { try { await api.folders.create(name); await loadList() } catch (e) { alert((e as Error).message) } }}
-        onRenameFolder={async (old, n) => { try { await api.folders.rename(old, n); if (activeFolder === old) dispatch({ type: 'move_essay', folder: n }); await loadList() } catch (e) { alert((e as Error).message) } }}
-        onDeleteFolder={async (name) => { try { await api.folders.delete(name); await loadList() } catch (e) { alert((e as Error).message) } }}
-        onPull={async () => { try { const out = await api.git.pull(); alert(out || 'Pulled.'); await loadList() } catch (e) { alert((e as Error).message) } }}
-        commitMessage={commitMessage}
-        onCommitMessageChange={msg => dispatch({ type: 'set_commit', message: msg })}
-        onPush={async () => {
-          if (!commitMessage.trim()) return alert('Enter a commit message first.')
-          try { const out = await api.git.push(commitMessage); alert(out || 'Pushed.'); dispatch({ type: 'set_commit', message: '' }) }
-          catch (e) { alert((e as Error).message) }
-        }}
-      />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {essay && activeFolder && activeSlug ? (
-          <>
-            <FrontmatterBar frontmatter={essay.frontmatter} onChange={handleFrontmatterChange} />
-            <EditorPanel
-              folder={activeFolder} slug={activeSlug}
-              initialBody={essay.body}
-              frontmatterRef={frontmatterRef} bodyRef={bodyRef}
-            />
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-            Select an essay or create a new one
-          </div>
-        )}
+      <div className="w-[220px] shrink-0 border-r border-border overflow-hidden">
+        {listPanel}
+      </div>
+      <div className="flex-1 overflow-hidden">
+        {editorPanel}
       </div>
     </div>
   )
