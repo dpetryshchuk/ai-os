@@ -11,6 +11,7 @@ import {
   Menu,
   MessageSquare,
   PenLine,
+  Sparkles,
   Target,
   TrendingUp,
   Users,
@@ -53,6 +54,7 @@ const WORKFLOWS: WorkflowSection[] = [
     ],
   },
   { label: 'Daily Log', path: '/daily-log', icon: CalendarDays },
+  { label: 'Look', path: '/look', icon: Sparkles },
 ]
 
 function NavItem({
