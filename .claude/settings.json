@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git *)",
+      "Bash(pytest*)",
+      "Bash(npm run *)",
+      "Bash(npm install*)",
+      "Bash(uvicorn*)",
+      "Bash(celery*)",
+      "Bash(alembic*)",
+      "Bash(docker compose *)",
+      "Bash(python *)"
+    ]
+  }
+}

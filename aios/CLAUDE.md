@@ -1,259 +1,80 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working in `aios/`.
+Guidance for Claude Code when working in `aios/`.
 
 ## Commands
 
 ```bash
-# Backend dev
-uvicorn main:app --reload --port 4116
-
-# Frontend dev
-cd frontend && npm run dev          # dev server on :5173, proxies /api → :4116
-
-# Tests
-pytest                              # from aios/
-pytest -v -k test_name             # specific test
-
-# Frontend build
-cd frontend && npm run build        # outputs to ../public
-
-# Celery worker (separate terminal)
-celery -A tasks worker --loglevel=info
-
-# Celery beat scheduler (separate terminal)
-celery -A tasks beat --loglevel=info
-
-# Alembic migrations
-alembic upgrade head                          # jobsearch DB
-alembic -c alembic_daily.ini upgrade head     # daily_log DB
-
-# Mark existing VPS as up to date without re-running migrations
-alembic stamp head
-alembic -c alembic_daily.ini stamp head
+uvicorn main:app --reload --port 4116        # backend dev
+cd frontend && npm run dev                   # frontend dev (:5173 → proxies /api → :4116)
+cd frontend && npm run build                 # build → ../public/
+pytest                                       # tests (from aios/)
+celery -A tasks worker --loglevel=info       # background worker
+celery -A tasks beat --loglevel=info         # scheduler
+alembic upgrade head                         # jobsearch DB migrations
+alembic -c alembic_daily.ini upgrade head    # daily_log DB migrations
 ```
 
-Local DB queries require an SSH tunnel: `ssh -L 5432:localhost:5432 dima@46.225.78.10`
+SSH tunnel for local DB access: `ssh -L 5432:localhost:5432 dima@46.225.78.10`
 
 ## Architecture
 
 ```
-Browser → Caddy (home.dmytropetryshchuk.com, basicauth)
-              → reverse_proxy localhost:4116 (flush_interval -1 for SSE)
-                    → FastAPI (uvicorn main:app)
-                          ↕ asyncpg        ↕ asyncpg
-                      jobsearch DB      daily_log DB
-                          ↕ Celery tasks
-                        Redis ← celery-worker + celery-beat
+Browser → Caddy (basicauth) → FastAPI :4116
+                                ↕ asyncpg          ↕ asyncpg
+                            jobsearch DB        daily_log DB
+                                ↕ Celery (Redis broker)
+                            celery-worker + celery-beat
 ```
 
-**Two separate Postgres databases**: `JOBSEARCH_DATABASE_URL` and `DAILY_LOG_DATABASE_URL`. Kept separate to preserve existing data — never merged.
+**Two DBs, never merged.** Routes use asyncpg pools. Celery workers use a sync SQLAlchemy session (`SyncSession` in `db.py`) — different client, same DB.
 
-**Event-driven workers**: Every task (scraper, health check) runs via `os_events` → Celery. UI triggers go through `POST /api/jobsearch/trigger/{task_type}` → `events.create()` → `process_event.delay(event_id)`.
+**Event pattern:** UI trigger → `POST /api/jobsearch/trigger/{type}` → `os_events` row → `process_event.delay(id)` → worker runs handler → updates row status. Beat scheduler does the same on cron.
+
+**Agent:** `agent.py` runs a LiteLLM tool-use loop over DeepSeek, streaming SSE events (`text-delta`, `tool-call`, `tool-result`, `[DONE]`). 8 CRM tools, all search-before-insert.
+
+**API convention:** all responses `{"ok": true/false, ...fields}` — never bare arrays.
+
+**Frontend:** all pages do `fetch('/api/...').then(d => d.data ?? [])`.
 
 ## File layout
 
-| File / Dir | Responsibility |
+| Path | What it does |
 |---|---|
-| `main.py` | FastAPI app, lifespan (open/close pools), router mounts |
-| `config.py` | Pydantic settings — env vars with defaults |
-| `db.py` | Two asyncpg pools (`jobsearch`, `daily_log`); `SyncSession` for Celery |
-| `models.py` | SQLAlchemy `OsEvent` model (for Celery's sync ORM access) |
-| `events.py` | `async create(pool, source, type, payload)` — inserts into `os_events` |
-| `agent.py` | LiteLLM + tool-use loop; `agentic_stream()` async generator → SSE |
+| `main.py` | FastAPI app + lifespan (opens/closes DB pools) + router mounts |
+| `config.py` | All env vars with defaults |
+| `db.py` | asyncpg pools + `SyncSession` for Celery |
+| `events.py` | `create(pool, source, type, payload)` — inserts `os_events` row |
+| `agent.py` | LiteLLM agentic loop + all 8 CRM tool implementations |
 | `tasks.py` | Celery app + `process_event` + `run_scheduled` + beat schedule |
-| `routers/jobsearch.py` | All `/api/jobsearch/*` endpoints |
-| `routers/writing.py` | All `/api/writing/*` endpoints (essays + freewrite) |
-| `routers/daily_log.py` | All `/api/daily-log/*` endpoints |
-| `routers/home.py` | `/api/home/health-checks` endpoint |
-| `routers/webhooks.py` | `/webhooks/*` (future) |
-| `workers/health.py` | `run(payload, session)` — pings all app health endpoints |
-| `workers/scrapers/*.py` | `run(payload, session)` — YC, HN, RemoteOK, Simplify |
-| `alembic/` | Alembic env + migrations for `jobsearch` DB |
-| `alembic.ini` | Alembic config for jobsearch DB |
-| `alembic_daily/` | Alembic env + migrations for `daily_log` DB |
-| `alembic_daily.ini` | Alembic config for daily_log DB |
-| `tests/` | pytest test suite |
-| `frontend/` | React 19 + Vite + Tailwind SPA |
-
-## API routes
-
-All responses: `{"ok": True, ...data}` or `{"ok": False, "error": "..."}`.
-
-### JobSearch (`/api/jobsearch/`)
-
-| Method | Path | Description |
-|---|---|---|
-| POST | `/agents/stream` | SSE streaming agent (LiteLLM + DeepSeek, 8 CRM tools) |
-| GET | `/pipeline` | Contacts with company + last_contact, ordered by stage |
-| GET | `/retro` | `weekly`, `daily`, `by_source`, `needs_action`, `stats` |
-| GET | `/leads` | `job_postings` where `status = 'new'` |
-| GET | `/applications` | `job_postings` where `status = 'applied'`, includes `resume_path` |
-| GET | `/notes[?q=]` | Notes; `?q=` does full-text search via `plainto_tsquery` |
-| POST | `/notes` | Create note (`category`, `title`, `url`, `content`) |
-| PATCH | `/notes/:id` | Update note |
-| DELETE | `/notes/:id` | Delete note |
-| POST | `/resumes` | Upload PDF — stored in `UPLOADS_DIR` |
-| GET | `/content` | Content posts ordered by date |
-| GET | `/events` | Recent `os_events` (default limit 50) |
-| POST | `/trigger/:task_type` | Trigger task — `scrape.yc`, `scrape.hn`, `scrape.remoteok`, `scrape.simplify`, `health.check` |
-
-### Writing (`/api/writing/`)
-
-Essays live in `{WRITING_DIR}/content/essays/{folder}/{slug}.md` (YAML frontmatter + markdown body).
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/essays` | List all essays (frontmatter metadata only) |
-| GET | `/essays/:folder/:slug` | Full essay (frontmatter + body) |
-| POST | `/essays` | Create — `{title, folder}` required |
-| PATCH | `/essays/:folder/:slug` | Update frontmatter + body |
-| DELETE | `/essays/:folder/:slug` | Delete file |
-| GET | `/folders` | List folders |
-| POST | `/folders` | Create folder |
-| DELETE | `/folders/:name` | Delete empty folder |
-| POST | `/essays/:folder/:slug/move` | Move to different folder |
-| POST | `/git/pull` | `git pull` in writing repo |
-| POST | `/git/push` | Commit + push with message |
-| GET | `/freewrite/entries` | List freewrite entries (newest first) |
-| GET | `/freewrite/entries/:id` | Get full entry |
-| POST | `/freewrite/entries` | Create entry (`{title?}`) |
-| PATCH | `/freewrite/entries/:id` | Update entry (`{title?, body?}`) |
-| DELETE | `/freewrite/entries/:id` | Delete entry |
-
-### Daily Log (`/api/daily-log/`)
-
-Uses `daily_log` Postgres DB.
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/day/:date` | Entry + habit logs for a date (ISO format `YYYY-MM-DD`) |
-| PUT | `/day/:date` | Upsert `did_today`, `doing_tomorrow`, habits map |
-| GET | `/calendar/:year/:month` | Days with entry/habit presence for calendar view |
-| GET | `/archive` | All days with full content |
-| GET | `/habits` | List habit types |
-| POST | `/habits` | Create habit (`name`, `kind: boolean\|number`) |
-| PATCH | `/habits/:id` | Update habit (name, active) |
-
-### Home (`/api/home/`)
-
-| Method | Path | Description |
-|---|---|---|
-| GET | `/health-checks` | Recent health check results from `os_events` |
-
-## Agent (jobsearch)
-
-`agent.py` uses LiteLLM to call DeepSeek (`deepseek/deepseek-chat`). The agentic loop runs tools until no more tool calls, then yields SSE events:
-
-- `data: {"type": "text-delta", "text": "..."}` — streamed text
-- `data: {"type": "tool-call", "name": "...", "input": {...}}` — tool invoked
-- `data: {"type": "tool-result", "name": "...", "result": "..."}` — tool result
-- `data: [DONE]` — stream finished
-
-**8 CRM tools:** `upsert_company`, `upsert_contact`, `upsert_job_posting`, `update_stage`, `log_interaction`, `log_content_post`, `search_notes`, `query_db`
-
-Rule: always call `upsert_company` first — every tool searches before inserting.
-
-## Celery tasks
-
-Two task types, dispatched via event ID:
-
-- `events.process` — picks up `os_events` row, runs handler, updates status
-- `events.run_scheduled` — creates `os_events` row then calls `process_event.delay()`
-
-Beat schedule (UTC):
-- 08:00 → `scrape.yc`
-- 08:05 → `scrape.hn`
-- 14:00 → `scrape.remoteok`
-- 14:05 → `scrape.simplify`
-- every 60s → `health.check`
+| `models.py` | SQLAlchemy `OsEvent` model (Celery only) |
+| `routers/` | One file per feature area — see files for full route list |
+| `workers/` | `health.py` + `scrapers/*.py` — each exports `run(payload, session)` |
+| `alembic/` | jobsearch DB migrations |
+| `alembic_daily/` | daily_log DB migrations |
+| `frontend/src/pages/` | One folder per feature area |
+| `frontend/src/Shell.tsx` | Sidebar nav — add links here for new pages |
+| `frontend/src/main.tsx` | React Router routes |
 
 ## Database schemas
 
-### jobsearch DB (`JOBSEARCH_DATABASE_URL`)
+Managed by Alembic — source of truth is `alembic/versions/` and `alembic_daily/versions/`.
 
-Managed by Alembic (`alembic/`). Migrations:
-- `0001_create_os_events.py` — `os_events` table
-- `0002_create_jobsearch_schema.py` — all CRM tables
+**jobsearch:** `companies`, `contacts`, `interactions`, `job_postings`, `content_posts`, `notes`, `os_events`
+- Contact stages: `Outreached → Responded → Ongoing → Dead`
 
-```
-companies       id (hex16), name, website
-contacts        id, name, company_id, role, source, stage, notes
-                stage: Outreached → Responded → Ongoing → Dead
-interactions    id, contact_id, date, direction (out/in), notes
-job_postings    id, company_id, title, link, source, status (new/applied/dropped),
-                resume_path, scraped_date, description
-content_posts   id, posted_date, content, impressions, engagements, comments
-notes           id, category, title, url, content, created_at
-os_events       id, source, type, status, payload, error, created_at, started_at, completed_at
-```
-
-### daily_log DB (`DAILY_LOG_DATABASE_URL`)
-
-Managed by Alembic (`alembic_daily/`). Migrations:
-- `0001_create_daily_log_schema.py` — all three tables
-
-```
-habit_types   id (serial), name, kind (boolean|number), active, created_at
-entries       date (PK), did_today, doing_tomorrow, updated_at
-habit_logs    habit_type_id + date (PK), value (jsonb)
-```
-
-## Environment variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `JOBSEARCH_DATABASE_URL` | `postgresql://...` | Jobsearch Postgres DB |
-| `DAILY_LOG_DATABASE_URL` | `postgresql://...` | Daily log Postgres DB |
-| `REDIS_URL` | `redis://redis:6379/0` | Celery broker + backend |
-| `DEEPSEEK_API_KEY` | `""` | DeepSeek API key (LiteLLM) |
-| `LANGFUSE_PUBLIC_KEY` | `""` | Optional LLM observability |
-| `LANGFUSE_SECRET_KEY` | `""` | Optional LLM observability |
-| `UPLOADS_DIR` | `/app/uploads` | Resume upload storage |
-| `WRITING_DIR` | `/repo` | Git repo for essays (container-internal path) |
-| `FREEWRITE_DIR` | `/freewrite` | Directory for freewrite entries (container-internal path) |
-| `GITHUB_TOKEN` | `""` | For git push from writing app |
-| `GITHUB_REPO` | `""` | `owner/repo` for writing git push |
-
-## Frontend (`frontend/`)
-
-React 19 + Vite + Tailwind + shadcn/ui components. Built output → `../public/` (served by FastAPI).
-
-Routes (React Router v7):
-- `/` → Home
-- `/events` → OS events log
-- `/jobsearch/chat` → Agent chat (SSE streaming)
-- `/jobsearch/pipeline` → Contacts pipeline
-- `/jobsearch/leads` → New job leads
-- `/jobsearch/applications` → Applied jobs
-- `/jobsearch/notes` → Notes with search + AI ask
-- `/jobsearch/retro` → Weekly/daily activity retro
-- `/writing/essays` → Essay editor (CodeMirror 6 + markdown)
-- `/writing/freewrite` → Freewrite journal
-- `/daily-log` → Daily log calendar + day editor
-
-Shell.tsx: persistent sidebar with section headers and nav links. Handles layout only — each page is self-contained.
-
-All pages use the pattern: `fetch('/api/...')` → `.then(d => d.data ?? [])` (responses are `{ok: true, ...fields}`, not direct arrays).
+**daily_log:** `habit_types`, `entries`, `habit_logs`
 
 ## Deploy
 
-Push to `master` → GitHub Actions detects `aios/**` changes → builds Docker image → pushes to `ghcr.io/dpetryshchuk/ai-os/aios:latest` → SSH to VPS → `docker compose pull aios && docker compose up -d aios celery-worker celery-beat`.
+Push to `master` → GitHub Actions:
+- `aios/**` changes → builds Docker image → `docker compose pull aios && docker compose up -d aios celery-worker celery-beat`
+- `docker-compose.yml` or `caddy/**` changes → `docker compose up -d --pull=never` + `sudo systemctl reload-or-restart caddy`
 
-VPS path: `/home/dima/ai-os/` — `docker-compose.yml` at root.
+VPS: `46.225.78.10`, app at `/home/dima/ai-os/`. Caddy is a **systemd service**, not Docker.
 
-### Running migrations on the VPS
-
-On a **fresh VPS** (new databases), run both:
+**Migrations on VPS (fresh):**
 ```bash
-ssh dima@46.225.78.10
-cd ai-os
 docker compose exec aios alembic upgrade head
 docker compose exec aios alembic -c alembic_daily.ini upgrade head
-```
-
-On an **existing VPS** where tables already exist (IF NOT EXISTS makes it safe to run, but stamp is cleaner):
-```bash
-docker compose exec aios alembic stamp head
-docker compose exec aios alembic -c alembic_daily.ini stamp head
 ```
