@@ -166,9 +166,7 @@ export default function Retro() {
         {funnel && funnel.stages.length > 0 && (
           <section>
             <SectionLabel>Conversion funnel</SectionLabel>
-            <p className="text-[11px] text-muted-foreground mb-3">
-              Targets based on Nick Saraev's cold outreach benchmarks — 15% reply rate, 40% reply-to-meeting.
-            </p>
+
             <div className="border border-border rounded-lg px-4 py-1">
               {funnel.stages.map(s => <FunnelBar key={s.stage} stage={s} total={funnel.stages[0]?.count ?? 0} />)}
             </div>
