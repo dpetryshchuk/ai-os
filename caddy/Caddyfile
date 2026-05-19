@@ -19,7 +19,7 @@ home.dmytropetryshchuk.com {
 
 os.onekeyflow.com {
   import auth
-  reverse_proxy localhost:4116 {
+  reverse_proxy localhost:4117 {
     flush_interval -1
   }
 }

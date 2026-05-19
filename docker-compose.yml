@@ -31,6 +31,17 @@ services:
       - internal
     restart: unless-stopped
 
+  proposals:
+    image: ghcr.io/dpetryshchuk/ai-os/proposals:latest
+    ports:
+      - "127.0.0.1:4117:4117"
+    environment:
+      PORT: "4117"
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+    networks:
+      - internal
+    restart: unless-stopped
+
   celery-worker:
     image: ghcr.io/dpetryshchuk/ai-os/aios:latest
     command: celery -A tasks worker --loglevel=info
