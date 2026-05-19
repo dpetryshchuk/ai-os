@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { Plus, X, Mic, Image, Video, Trash2, ChevronDown } from 'lucide-react'
+import { Plus, X, Mic, Image, Video, Trash2 } from 'lucide-react'
 
-const CATEGORIES = ['copy', 'packaging', 'typography', 'color', 'layout', 'product', 'shape', 'other']
+const PRESET_CATEGORIES = ['copy', 'packaging', 'typography', 'color', 'layout', 'product', 'shape']
 
 const CAT_COLORS: Record<string, string> = {
   copy:       'bg-blue-500/10 text-blue-500 border-blue-500/20',
@@ -12,7 +12,10 @@ const CAT_COLORS: Record<string, string> = {
   layout:     'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
   product:    'bg-orange-500/10 text-orange-500 border-orange-500/20',
   shape:      'bg-cyan-500/10 text-cyan-500 border-cyan-500/20',
-  other:      'bg-muted text-muted-foreground border-border',
+}
+
+function catColor(cat: string) {
+  return CAT_COLORS[cat] ?? 'bg-muted text-muted-foreground border-border'
 }
 
 interface LookItem {
@@ -23,39 +26,40 @@ interface LookItem {
   mime_type: string | null
   note: string | null
   source: string | null
+  voice_path: string | null
+  voice_mime: string | null
   created_at: string | null
 }
 
 function MediaThumb({ item, onClick }: { item: LookItem; onClick: () => void }) {
   const src = `/api/look/items/${item.id}/file`
-
   return (
     <div
       className="relative group cursor-pointer rounded-lg overflow-hidden bg-muted border border-border"
       onClick={onClick}
     >
       {item.media_type === 'image' ? (
-        <img
-          src={src}
-          alt={item.note ?? item.category}
-          className="w-full object-cover"
-          loading="lazy"
-        />
+        <img src={src} alt={item.note ?? item.category} className="w-full object-cover" loading="lazy" />
       ) : item.media_type === 'video' ? (
         <div className="relative aspect-video bg-black flex items-center justify-center">
           <video src={src} className="w-full h-full object-cover" preload="metadata" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Video className="size-8 text-white/80" />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+            <Video className="size-7 text-white/80" />
           </div>
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center gap-2 py-8 px-4 bg-muted/50">
           <Mic className="size-8 text-muted-foreground" />
-          <audio src={src} controls className="w-full max-w-[200px]" />
+        </div>
+      )}
+      {/* Voice note badge when photo also has audio */}
+      {item.voice_path && item.media_type !== 'voice' && (
+        <div className="absolute top-2 left-2 bg-black/60 rounded-full p-1">
+          <Mic className="size-3 text-white" />
         </div>
       )}
       <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-        <span className={cn('text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded border', CAT_COLORS[item.category] ?? CAT_COLORS.other)}>
+        <span className={cn('text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded border', catColor(item.category))}>
           {item.category}
         </span>
         {item.source && <p className="text-[10px] text-white/80 mt-1 truncate">{item.source}</p>}
@@ -75,41 +79,45 @@ function ItemDetail({ item, onClose, onDelete }: { item: LookItem; onClose: () =
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex flex-col" onClick={onClose}>
-      <div className="flex items-center justify-between px-4 py-3" onClick={e => e.stopPropagation()}>
-        <span className={cn('text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded border', CAT_COLORS[item.category] ?? CAT_COLORS.other)}>
+    <div className="fixed inset-0 z-50 bg-black/90 flex flex-col" onClick={onClose}>
+      <div className="flex items-center justify-between px-4 py-3 shrink-0" onClick={e => e.stopPropagation()}>
+        <span className={cn('text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded border', catColor(item.category))}>
           {item.category}
         </span>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="text-red-400 hover:text-red-300 p-1 transition-colors"
-          >
+          <button onClick={handleDelete} disabled={deleting} className="text-red-400 hover:text-red-300 p-1">
             <Trash2 className="size-4" />
           </button>
-          <button onClick={onClose} className="text-white/70 hover:text-white p-1 transition-colors">
+          <button onClick={onClose} className="text-white/70 hover:text-white p-1">
             <X className="size-5" />
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-4" onClick={e => e.stopPropagation()}>
+      <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-4 gap-4" onClick={e => e.stopPropagation()}>
         {item.media_type === 'image' ? (
-          <img src={src} alt="" className="max-w-full max-h-[70vh] rounded-lg object-contain" />
+          <img src={src} alt="" className="max-w-full max-h-[65vh] rounded-lg object-contain" />
         ) : item.media_type === 'video' ? (
-          <video src={src} controls autoPlay className="max-w-full max-h-[70vh] rounded-lg" />
+          <video src={src} controls autoPlay className="max-w-full max-h-[65vh] rounded-lg" />
         ) : (
-          <div className="flex flex-col items-center gap-4">
-            <Mic className="size-16 text-white/40" />
+          <div className="flex flex-col items-center gap-3">
+            <Mic className="size-14 text-white/30" />
             <audio src={src} controls autoPlay />
+          </div>
+        )}
+
+        {/* Attached voice note */}
+        {item.voice_path && (
+          <div className="w-full max-w-sm bg-white/10 rounded-xl p-3 flex items-center gap-3" onClick={e => e.stopPropagation()}>
+            <Mic className="size-4 text-white/60 shrink-0" />
+            <audio src={`/api/look/items/${item.id}/voice`} controls className="flex-1 h-8" />
           </div>
         )}
       </div>
 
       {(item.note || item.source) && (
-        <div className="px-4 pb-6 text-center" onClick={e => e.stopPropagation()}>
-          {item.source && <p className="text-sm text-white/60 font-mono">{item.source}</p>}
+        <div className="px-4 pb-6 text-center shrink-0" onClick={e => e.stopPropagation()}>
+          {item.source && <p className="text-sm text-white/50 font-mono">{item.source}</p>}
           {item.note && <p className="text-sm text-white/80 mt-1">{item.note}</p>}
         </div>
       )}
@@ -119,13 +127,18 @@ function ItemDetail({ item, onClose, onDelete }: { item: LookItem; onClose: () =
 
 function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded: (item: LookItem) => void }) {
   const [category, setCategory] = useState('copy')
+  const [customCat, setCustomCat] = useState('')
   const [note, setNote] = useState('')
   const [source, setSource] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  const [voiceFile, setVoiceFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const voiceRef = useRef<HTMLInputElement>(null)
+
+  const activeCategory = customCat.trim() || category
 
   function handleFile(f: File) {
     setFile(f)
@@ -143,9 +156,10 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
     try {
       const fd = new FormData()
       fd.append('file', file)
-      fd.append('category', category)
+      fd.append('category', activeCategory)
       fd.append('note', note)
       fd.append('source', source)
+      if (voiceFile) fd.append('voice_note', voiceFile)
       const res = await fetch('/api/look/items', { method: 'POST', body: fd })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
@@ -158,41 +172,36 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
 
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
-
-      {/* Sheet */}
-      <div className="fixed inset-x-0 bottom-0 z-50 bg-background border-t border-border rounded-t-2xl flex flex-col max-h-[90vh]">
-        {/* Handle */}
-        <div className="flex justify-center pt-3 pb-1">
+      <div className="fixed inset-x-0 bottom-0 z-50 bg-background border-t border-border rounded-t-2xl flex flex-col max-h-[92vh]">
+        <div className="flex justify-center pt-3 pb-1 shrink-0">
           <div className="w-10 h-1 bg-border rounded-full" />
         </div>
-
-        <div className="flex items-center justify-between px-4 pb-3">
+        <div className="flex items-center justify-between px-4 pb-3 shrink-0">
           <h2 className="text-sm font-semibold">Add item</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
             <X className="size-4" />
           </button>
         </div>
 
-        <div className="overflow-y-auto px-4 pb-6 flex flex-col gap-5">
-          {/* File picker */}
+        <div className="overflow-y-auto px-4 pb-8 flex flex-col gap-5">
+
+          {/* Primary media */}
           <div>
             <input
               ref={fileRef}
               type="file"
               accept="image/*,video/*,audio/*"
-              capture="environment"
               className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
             />
             {file ? (
               <div className="relative rounded-lg overflow-hidden bg-muted border border-border">
                 {preview && file.type.startsWith('image/') && (
-                  <img src={preview} alt="" className="w-full max-h-52 object-contain" />
+                  <img src={preview} alt="" className="w-full max-h-56 object-contain" />
                 )}
                 {preview && file.type.startsWith('video/') && (
-                  <video src={preview} className="w-full max-h-52 object-contain" />
+                  <video src={preview} className="w-full max-h-56 object-contain" />
                 )}
                 {file.type.startsWith('audio/') && (
                   <div className="flex items-center gap-3 p-4">
@@ -201,7 +210,7 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
                   </div>
                 )}
                 <button
-                  className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white hover:bg-black/80"
+                  className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white"
                   onClick={() => { setFile(null); setPreview(null) }}
                 >
                   <X className="size-3" />
@@ -210,30 +219,64 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
             ) : (
               <button
                 onClick={() => fileRef.current?.click()}
-                className="w-full border-2 border-dashed border-border rounded-lg py-10 flex flex-col items-center gap-2 text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors"
+                className="w-full border-2 border-dashed border-border rounded-xl py-10 flex flex-col items-center gap-2 text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors"
               >
-                <div className="flex gap-3">
+                <div className="flex gap-4">
                   <Image className="size-6" />
                   <Video className="size-6" />
                   <Mic className="size-6" />
                 </div>
-                <span className="text-sm">Tap to pick photo, video, or voice note</span>
+                <span className="text-sm">Photo, video, or voice note</span>
+                <span className="text-xs text-muted-foreground/50">Tap to open picker</span>
               </button>
             )}
           </div>
 
+          {/* Attach voice note (only shown when primary is photo/video) */}
+          {file && !file.type.startsWith('audio/') && (
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1.5">
+                Voice note <span className="normal-case tracking-normal">(optional — attach audio to this photo)</span>
+              </p>
+              <input
+                ref={voiceRef}
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) setVoiceFile(f) }}
+              />
+              {voiceFile ? (
+                <div className="flex items-center gap-3 bg-muted rounded-lg px-3 py-2.5 border border-border">
+                  <Mic className="size-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm text-muted-foreground flex-1 truncate">{voiceFile.name}</span>
+                  <button onClick={() => setVoiceFile(null)} className="text-muted-foreground hover:text-foreground">
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => voiceRef.current?.click()}
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors"
+                >
+                  <Mic className="size-4" />
+                  Attach voice note
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Category */}
           <div>
             <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-2">Category</p>
-            <div className="flex flex-wrap gap-1.5">
-              {CATEGORIES.map(c => (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {PRESET_CATEGORIES.map(c => (
                 <button
                   key={c}
-                  onClick={() => setCategory(c)}
+                  onClick={() => { setCategory(c); setCustomCat('') }}
                   className={cn(
                     'px-2.5 py-1 rounded-full text-xs font-medium border transition-colors',
-                    category === c
-                      ? CAT_COLORS[c] ?? CAT_COLORS.other
+                    activeCategory === c && !customCat.trim()
+                      ? catColor(c)
                       : 'bg-muted text-muted-foreground border-transparent hover:border-border'
                   )}
                 >
@@ -241,29 +284,40 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
                 </button>
               ))}
             </div>
+            <input
+              type="text"
+              value={customCat}
+              onChange={e => setCustomCat(e.target.value)}
+              placeholder="Or type your own…"
+              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-foreground/40 placeholder:text-muted-foreground/40"
+            />
           </div>
 
           {/* Source */}
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1.5">Where? <span className="normal-case tracking-normal">(optional)</span></p>
+            <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1.5">
+              Where? <span className="normal-case tracking-normal">(optional)</span>
+            </p>
             <input
               type="text"
               value={source}
               onChange={e => setSource(e.target.value)}
               placeholder="e.g. Target, Trader Joe's, Instagram"
-              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-foreground/40 placeholder:text-muted-foreground/50"
+              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-foreground/40 placeholder:text-muted-foreground/40"
             />
           </div>
 
           {/* Note */}
           <div>
-            <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1.5">Note <span className="normal-case tracking-normal">(optional)</span></p>
+            <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1.5">
+              Note <span className="normal-case tracking-normal">(optional)</span>
+            </p>
             <textarea
               value={note}
               onChange={e => setNote(e.target.value)}
               placeholder="What caught your eye?"
               rows={2}
-              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-foreground/40 placeholder:text-muted-foreground/50 resize-none"
+              className="w-full bg-muted border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-foreground/40 placeholder:text-muted-foreground/40 resize-none"
             />
           </div>
 
@@ -272,7 +326,7 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
           <button
             onClick={handleSubmit}
             disabled={uploading || !file}
-            className="w-full bg-foreground text-background py-3 rounded-lg text-sm font-semibold disabled:opacity-40 active:scale-[.98] transition-transform"
+            className="w-full bg-foreground text-background py-3 rounded-xl text-sm font-semibold disabled:opacity-40 active:scale-[.98] transition-transform"
           >
             {uploading ? 'Saving…' : 'Save'}
           </button>
@@ -290,7 +344,8 @@ export default function Look() {
   const [selected, setSelected] = useState<LookItem | null>(null)
 
   useEffect(() => {
-    const url = filter === 'all' ? '/api/look/items' : `/api/look/items?category=${filter}`
+    const url = filter === 'all' ? '/api/look/items' : `/api/look/items?category=${encodeURIComponent(filter)}`
+    setLoading(true)
     fetch(url)
       .then(r => r.json())
       .then(d => setItems(d.items ?? []))
@@ -308,11 +363,15 @@ export default function Look() {
     setSelected(null)
   }
 
-  // Build columns for masonry: split items into 2 cols on mobile, 3 on md+
   const cols2 = [items.filter((_, i) => i % 2 === 0), items.filter((_, i) => i % 2 === 1)]
   const cols3 = [items.filter((_, i) => i % 3 === 0), items.filter((_, i) => i % 3 === 1), items.filter((_, i) => i % 3 === 2)]
 
+  // Build filter pill list: presets that have items, plus any custom categories
   const usedCategories = Array.from(new Set(items.map(i => i.category)))
+  const filterCats = [
+    ...PRESET_CATEGORIES.filter(c => usedCategories.includes(c)),
+    ...usedCategories.filter(c => !PRESET_CATEGORIES.includes(c)),
+  ]
 
   return (
     <div className="relative flex flex-col h-full overflow-hidden">
@@ -326,15 +385,15 @@ export default function Look() {
               filter === 'all' ? 'bg-foreground text-background border-foreground' : 'bg-muted text-muted-foreground border-transparent hover:border-border'
             )}
           >
-            All {items.length > 0 && `(${items.length})`}
+            All{items.length > 0 ? ` (${items.length})` : ''}
           </button>
-          {CATEGORIES.filter(c => usedCategories.includes(c)).map(c => (
+          {filterCats.map(c => (
             <button
               key={c}
               onClick={() => setFilter(c)}
               className={cn(
                 'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
-                filter === c ? CAT_COLORS[c] ?? CAT_COLORS.other : 'bg-muted text-muted-foreground border-transparent hover:border-border'
+                filter === c ? catColor(c) : 'bg-muted text-muted-foreground border-transparent hover:border-border'
               )}
             >
               {c}
@@ -343,34 +402,28 @@ export default function Look() {
         </div>
       </div>
 
-      {/* Grid */}
+      {/* Masonry grid */}
       <div className="flex-1 overflow-y-auto px-3 py-3">
         {loading ? (
           <p className="text-sm text-muted-foreground text-center py-10">Loading…</p>
         ) : items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+          <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
             <p className="text-sm text-muted-foreground">Nothing here yet.</p>
-            <p className="text-xs text-muted-foreground/60">Tap + to capture something inspiring.</p>
+            <p className="text-xs text-muted-foreground/50">Tap + to capture something inspiring.</p>
           </div>
         ) : (
           <>
-            {/* 2-col on mobile */}
             <div className="grid grid-cols-2 gap-2 md:hidden">
               {cols2.map((col, ci) => (
                 <div key={ci} className="flex flex-col gap-2">
-                  {col.map(item => (
-                    <MediaThumb key={item.id} item={item} onClick={() => setSelected(item)} />
-                  ))}
+                  {col.map(item => <MediaThumb key={item.id} item={item} onClick={() => setSelected(item)} />)}
                 </div>
               ))}
             </div>
-            {/* 3-col on md+ */}
             <div className="hidden md:grid md:grid-cols-3 gap-3">
               {cols3.map((col, ci) => (
                 <div key={ci} className="flex flex-col gap-3">
-                  {col.map(item => (
-                    <MediaThumb key={item.id} item={item} onClick={() => setSelected(item)} />
-                  ))}
+                  {col.map(item => <MediaThumb key={item.id} item={item} onClick={() => setSelected(item)} />)}
                 </div>
               ))}
             </div>
@@ -386,15 +439,8 @@ export default function Look() {
         <Plus className="size-6" />
       </button>
 
-      {/* Upload sheet */}
-      {showUpload && (
-        <UploadSheet onClose={() => setShowUpload(false)} onUploaded={handleUploaded} />
-      )}
-
-      {/* Item detail */}
-      {selected && (
-        <ItemDetail item={selected} onClose={() => setSelected(null)} onDelete={handleDeleted} />
-      )}
+      {showUpload && <UploadSheet onClose={() => setShowUpload(false)} onUploaded={handleUploaded} />}
+      {selected && <ItemDetail item={selected} onClose={() => setSelected(null)} onDelete={handleDeleted} />}
     </div>
   )
 }

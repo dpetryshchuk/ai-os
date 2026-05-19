@@ -423,6 +423,8 @@ class LookItemRow(BaseModel):
     mime_type: str | None = None
     note: str | None = None
     source: str | None = None
+    voice_path: str | None = None
+    voice_mime: str | None = None
     created_at: datetime | None = None
 
 
