@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import secrets
@@ -89,7 +90,6 @@ async def get_pipeline(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> P
 
 @router.get("/retro")
 async def get_retro(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> RetroResponse:
-    import asyncio
     weekly, daily, by_source, needs_action, stats = await asyncio.gather(
         pool.fetch("""
             SELECT date_trunc('week', date) AS week, COUNT(*) AS count

@@ -231,11 +231,6 @@ def git_push(body: GitPush) -> GitResponse:
 
 # ── Freewrite ─────────────────────────────────────────────────────────────────
 
-def _fw_make_id() -> str:
-    ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-    return f"{str(uuid.uuid4()).upper()}-{ts}"
-
-
 def _fw_entry_path(entry_id: str) -> Path:
     return FREEWRITE_DIR / f"{entry_id}.md"
 
@@ -278,7 +273,7 @@ def list_freewrite_entries() -> FreewriteEntriesResponse:
 @router.post("/freewrite/entries", status_code=201)
 def create_freewrite_entry() -> FreewriteCreateResponse:
     FREEWRITE_DIR.mkdir(parents=True, exist_ok=True)
-    entry_id = _fw_make_id()
+    entry_id = f"{str(uuid.uuid4()).upper()}-{datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}"
     _fw_entry_path(entry_id).write_text("\n\n", encoding="utf-8")
     return FreewriteCreateResponse(id=entry_id)
 

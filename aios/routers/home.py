@@ -36,7 +36,7 @@ async def list_apps() -> AppsResponse:
 
 @router.get("/health")
 async def system_health() -> HealthResponse:
-    async def check(name: str, url: str):
+    async def check(name: str) -> tuple[str, str]:
         try:
             async with httpx.AsyncClient(timeout=3) as client:
                 r = await client.get("http://localhost:4116/api/health")
@@ -44,5 +44,5 @@ async def system_health() -> HealthResponse:
         except Exception:
             return name, "error"
 
-    results = await asyncio.gather(*[check(a.name, a.url) for a in APPS_REGISTRY])
+    results = await asyncio.gather(*[check(a.name) for a in APPS_REGISTRY])
     return HealthResponse(apps=dict(results))
