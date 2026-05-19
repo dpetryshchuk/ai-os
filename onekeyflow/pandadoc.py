@@ -1,3 +1,5 @@
+import time
+
 import httpx
 
 import config
@@ -91,6 +93,26 @@ def create_document(payload: dict) -> str:
         if not r.is_success:
             raise ValueError(f"PandaDoc {r.status_code}: {r.text}")
         return r.json()["id"]
+
+
+def wait_for_ready(doc_id: str, timeout: int = 30) -> None:
+    """Poll until document leaves the 'uploaded' state (async processing)."""
+    if not config.PANDADOC_API_KEY:
+        raise ValueError("PANDADOC_API_KEY is not configured")
+    deadline = time.time() + timeout
+    with httpx.Client(timeout=10) as client:
+        while time.time() < deadline:
+            r = client.get(
+                f"https://api.pandadoc.com/public/v1/documents/{doc_id}",
+                headers={"Authorization": f"API-Key {config.PANDADOC_API_KEY}"},
+            )
+            if not r.is_success:
+                raise ValueError(f"PandaDoc status {r.status_code}: {r.text}")
+            status = r.json().get("status", "")
+            if status != "document.uploaded":
+                return
+            time.sleep(2)
+    raise TimeoutError(f"Document {doc_id} still processing after {timeout}s")
 
 
 def create_session(doc_id: str, recipient_email: str) -> str:
