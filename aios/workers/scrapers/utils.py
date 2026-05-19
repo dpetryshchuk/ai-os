@@ -172,13 +172,16 @@ def sync_jobs_to_db(jobs: list[ScrapedJob]) -> dict:
 
                 if not existing:
                     with conn.cursor() as cur:
-                        from datetime import date
+                        from datetime import date, datetime, timezone
                         cur.execute(
-                            "INSERT INTO job_postings (id, company_id, title, link, source, scraped_date, status, description) "
-                            "VALUES (%s, %s, %s, %s, %s, %s, 'new', %s)",
+                            "INSERT INTO job_postings "
+                            "(id, company_id, title, link, source, scraped_date, scraped_at, status, description, location) "
+                            "VALUES (%s, %s, %s, %s, %s, %s, %s, 'new', %s, %s)",
                             (
                                 _new_id(), company_id, job.job_title, job.job_link,
-                                source, date.today().isoformat(), job.description,
+                                source, date.today().isoformat(),
+                                datetime.now(timezone.utc),
+                                job.description, job.location,
                             ),
                         )
                     conn.commit()
@@ -188,8 +191,9 @@ def sync_jobs_to_db(jobs: list[ScrapedJob]) -> dict:
                 elif job.job_link and existing["link"] != job.job_link:
                     with conn.cursor() as cur:
                         cur.execute(
-                            "UPDATE job_postings SET link = %s, description = COALESCE(%s, description) WHERE id = %s",
-                            (job.job_link, job.description, existing["id"]),
+                            "UPDATE job_postings SET link = %s, description = COALESCE(%s, description), "
+                            "location = COALESCE(%s, location) WHERE id = %s",
+                            (job.job_link, job.description, job.location, existing["id"]),
                         )
                     conn.commit()
                     updated += 1
