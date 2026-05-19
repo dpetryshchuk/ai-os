@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
+import { useAgentRefresh } from '@/hooks/useAgentRefresh'
 
 interface Contact {
   id: string
@@ -30,13 +31,17 @@ export default function Pipeline() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true)
     fetch('/api/jobsearch/pipeline')
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then(d => setContacts(d.contacts ?? []))
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => { load() }, [load])
+  useAgentRefresh(load)
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ExternalLink, RefreshCw, MapPin, Briefcase } from 'lucide-react'
+import { useAgentRefresh } from '@/hooks/useAgentRefresh'
 
 interface Lead {
   id: string
@@ -42,6 +43,7 @@ export default function Leads() {
   }, [])
 
   useEffect(() => { load() }, [load])
+  useAgentRefresh(load)
 
   const triggerScrape = async () => {
     setScraping(true)
