@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { ChevronLeft, ChevronRight, CalendarDays, X, Settings } from 'lucide-react'
 
 // ──── Types ────────────────────────────────────────────────────────────────
 
@@ -39,11 +40,26 @@ const api = {
 
 function todayStr(): string {
   const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 function pad(n: number): string { return String(n).padStart(2, '0') }
+
+function addDays(dateStr: string, n: number): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  d.setDate(d.getDate() + n)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+function fmtDateHeading(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+}
+
+function fmtDateShort(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
 
 // ──── Calendar ─────────────────────────────────────────────────────────────
 
@@ -156,12 +172,9 @@ function Archive({ days, habits, selectedDate, onSelectDate }: { days: ArchiveDa
   return (
     <div className="space-y-0.5">
       {Object.keys(grouped).sort((a, b) => b.localeCompare(a)).map(year => {
-        const [open, setOpen] = [true, useState(true)[1]]
         const months = grouped[year]
         const total = Object.values(months).reduce((s, m) => s + Object.keys(m).length, 0)
-        return (
-          <YearSection key={year} year={year} months={months} activeHabits={activeHabits} selectedDate={selectedDate} onSelectDate={onSelectDate} total={total} />
-        )
+        return <YearSection key={year} year={year} months={months} activeHabits={activeHabits} selectedDate={selectedDate} onSelectDate={onSelectDate} total={total} />
       })}
     </div>
   )
@@ -294,14 +307,10 @@ function DayEditor({ date, habits }: { date: string; habits: Habit[] }) {
     }).then(() => setSaveStatus('saved')).catch(() => setSaveStatus('error'))
   }
 
-  const [y, m, d] = date.split('-').map(Number)
-  const heading = new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-
   return (
-    <div className="flex-1 flex flex-col p-6 overflow-y-auto relative max-w-2xl">
-      <h2 className="text-base font-semibold mb-5">{heading}</h2>
+    <div className="flex-1 flex flex-col p-4 md:p-6 overflow-y-auto relative max-w-2xl">
       {activeHabits.length > 0 && (
-        <div className="mb-6">
+        <div className="mb-5">
           <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-3">Habits</div>
           <div className="flex flex-col gap-2">
             {activeHabits.map(h => (
@@ -429,62 +438,150 @@ function HabitManager({ habits, onHabitsChange, onClose }: { habits: Habit[]; on
   )
 }
 
+// ──── CalendarDrawer (mobile overlay) ──────────────────────────────────────
+
+function CalendarDrawer({ habits, selectedDate, onSelectDate, onClose }: {
+  habits: Habit[]; selectedDate: string; onSelectDate: (d: string) => void; onClose: () => void
+}) {
+  const [archiveView, setArchiveView] = useState(false)
+  const [archiveDays, setArchiveDays] = useState<ArchiveDay[]>([])
+  useEffect(() => {
+    if (archiveView) api.archive.get().then(d => setArchiveDays(d.days)).catch(() => {})
+  }, [archiveView])
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col bg-background">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="font-semibold text-sm">Daily Log</span>
+          <div className="flex text-[12px]">
+            <button
+              onClick={() => setArchiveView(false)}
+              className={`px-2 py-0.5 rounded-l border border-border ${!archiveView ? 'bg-foreground text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+            >Calendar</button>
+            <button
+              onClick={() => setArchiveView(true)}
+              className={`px-2 py-0.5 rounded-r border border-l-0 border-border ${archiveView ? 'bg-foreground text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+            >Log</button>
+          </div>
+        </div>
+        <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground">
+          <X size={16} />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        {archiveView
+          ? <Archive days={archiveDays} habits={habits} selectedDate={selectedDate} onSelectDate={d => { onSelectDate(d); onClose() }} />
+          : <Calendar selectedDate={selectedDate} onSelectDate={d => { onSelectDate(d); onClose() }} habits={habits} />
+        }
+      </div>
+    </div>
+  )
+}
+
 // ──── Page ─────────────────────────────────────────────────────────────────
 
-type LeftView = 'calendar' | 'log'
+type DesktopLeftView = 'calendar' | 'log'
 
 export default function DailyLog() {
   const [habits, setHabits] = useState<Habit[]>([])
   const [selectedDate, setSelectedDate] = useState(todayStr())
   const [showHabitManager, setShowHabitManager] = useState(false)
-  const [leftView, setLeftView] = useState<LeftView>('calendar')
+  const [showCalendarDrawer, setShowCalendarDrawer] = useState(false)
+  const [desktopLeftView, setDesktopLeftView] = useState<DesktopLeftView>('calendar')
   const [archiveDays, setArchiveDays] = useState<ArchiveDay[]>([])
+  const isToday = selectedDate === todayStr()
 
   useEffect(() => { api.habits.list().then(d => setHabits(d.habits)).catch(() => {}) }, [])
-
   useEffect(() => {
-    if (leftView === 'log') api.archive.get().then(d => setArchiveDays(d.days)).catch(() => {})
-  }, [leftView])
+    if (desktopLeftView === 'log') api.archive.get().then(d => setArchiveDays(d.days)).catch(() => {})
+  }, [desktopLeftView])
 
-  function handleSelectDate(date: string) {
+  function handleDesktopSelectDate(date: string) {
     setSelectedDate(date)
-    if (leftView === 'log') setLeftView('calendar')
+    if (desktopLeftView === 'log') setDesktopLeftView('calendar')
   }
 
   return (
     <div className="flex h-full overflow-hidden">
-      <div className="w-[360px] shrink-0 border-r border-border flex flex-col overflow-hidden">
+
+      {/* Desktop left panel */}
+      <div className="hidden md:flex w-[360px] shrink-0 border-r border-border flex-col overflow-hidden">
         <div className="flex items-center justify-between px-4 pt-4 pb-3 shrink-0">
           <div className="flex items-center gap-3">
             <span className="font-semibold text-sm">Daily Log</span>
             <div className="flex text-[12px]">
               <button
-                onClick={() => setLeftView('calendar')}
-                className={`px-2 py-0.5 rounded-l border border-border ${leftView === 'calendar' ? 'bg-foreground text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+                onClick={() => setDesktopLeftView('calendar')}
+                className={`px-2 py-0.5 rounded-l border border-border ${desktopLeftView === 'calendar' ? 'bg-foreground text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
               >Calendar</button>
               <button
-                onClick={() => setLeftView('log')}
-                className={`px-2 py-0.5 rounded-r border border-l-0 border-border ${leftView === 'log' ? 'bg-foreground text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
+                onClick={() => setDesktopLeftView('log')}
+                className={`px-2 py-0.5 rounded-r border border-l-0 border-border ${desktopLeftView === 'log' ? 'bg-foreground text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}
               >Log</button>
             </div>
           </div>
           <button
             onClick={() => setShowHabitManager(true)}
-            className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground text-lg"
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground"
             title="Manage habits"
-          >⚙</button>
+          ><Settings size={14} /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-4 pb-4">
-          {leftView === 'calendar' ? (
-            <Calendar selectedDate={selectedDate} onSelectDate={setSelectedDate} habits={habits} />
-          ) : (
-            <Archive days={archiveDays} habits={habits} selectedDate={selectedDate} onSelectDate={handleSelectDate} />
-          )}
+          {desktopLeftView === 'calendar'
+            ? <Calendar selectedDate={selectedDate} onSelectDate={setSelectedDate} habits={habits} />
+            : <Archive days={archiveDays} habits={habits} selectedDate={selectedDate} onSelectDate={handleDesktopSelectDate} />
+          }
         </div>
       </div>
-      <div className="flex-1 flex overflow-hidden">
-        <DayEditor date={selectedDate} habits={habits} />
+
+      {/* Right/main panel */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+
+        {/* Mobile header: date nav + calendar button + settings */}
+        <div className="md:hidden flex items-center gap-2 px-3 py-2.5 border-b border-border shrink-0">
+          <button
+            onClick={() => setSelectedDate(d => addDays(d, -1))}
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground"
+          ><ChevronLeft size={16} /></button>
+          <button
+            onClick={() => setShowCalendarDrawer(true)}
+            className="flex-1 flex items-center justify-center gap-1.5 text-sm font-medium hover:text-foreground text-foreground/80 transition-colors"
+          >
+            <CalendarDays size={13} className="text-muted-foreground" />
+            {isToday ? 'Today' : fmtDateShort(selectedDate)}
+          </button>
+          <button
+            onClick={() => setSelectedDate(d => addDays(d, 1))}
+            disabled={selectedDate >= todayStr()}
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground disabled:opacity-30"
+          ><ChevronRight size={16} /></button>
+          <button
+            onClick={() => setShowHabitManager(true)}
+            className="w-7 h-7 flex items-center justify-center rounded hover:bg-muted text-muted-foreground ml-1"
+          ><Settings size={14} /></button>
+        </div>
+
+        {/* Desktop: date heading */}
+        <div className="hidden md:block px-6 pt-5 pb-1 shrink-0">
+          <h2 className="text-base font-semibold">{fmtDateHeading(selectedDate)}</h2>
+        </div>
+
+        {/* Editor */}
+        <div className="flex-1 overflow-hidden flex">
+          <DayEditor date={selectedDate} habits={habits} />
+        </div>
       </div>
+
+      {/* Mobile calendar drawer */}
+      {showCalendarDrawer && (
+        <CalendarDrawer
+          habits={habits}
+          selectedDate={selectedDate}
+          onSelectDate={setSelectedDate}
+          onClose={() => setShowCalendarDrawer(false)}
+        />
+      )}
+
       {showHabitManager && (
         <HabitManager habits={habits} onHabitsChange={setHabits} onClose={() => setShowHabitManager(false)} />
       )}
