@@ -83,11 +83,12 @@ function CalendarRow({ daily }: { daily: { date: string; count: number }[] }) {
   )
 }
 
-function FunnelBar({ stage }: { stage: FunnelStage }) {
+function FunnelBar({ stage, total }: { stage: FunnelStage; total: number }) {
   const benchmark = BENCHMARKS[stage.stage]
   const pct = stage.pct_of_prev
   const above = pct !== null && benchmark !== undefined && pct >= benchmark
   const below = pct !== null && benchmark !== undefined && pct < benchmark
+  const barWidth = total > 0 ? Math.round((stage.count / total) * 100) : 0
 
   return (
     <div className="flex items-center gap-4 py-3 border-b border-border/50 last:border-0">
@@ -100,14 +101,10 @@ function FunnelBar({ stage }: { stage: FunnelStage }) {
         )}
       </div>
       <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-        {pct !== null ? (
-          <div
-            className={cn('h-full rounded-full transition-all', above ? 'bg-emerald-500' : below ? 'bg-amber-500' : 'bg-foreground/30')}
-            style={{ width: `${Math.min(pct, 100)}%` }}
-          />
-        ) : (
-          <div className="h-full w-full bg-foreground/20 rounded-full" />
-        )}
+        <div
+          className={cn('h-full rounded-full transition-all', above ? 'bg-emerald-500' : below ? 'bg-amber-500' : 'bg-foreground/30')}
+          style={{ width: `${barWidth}%` }}
+        />
       </div>
       <span className="w-8 text-right text-lg font-semibold tabular-nums shrink-0">{stage.count}</span>
     </div>
@@ -173,7 +170,7 @@ export default function Retro() {
               Targets based on Nick Saraev's cold outreach benchmarks — 15% reply rate, 40% reply-to-meeting.
             </p>
             <div className="border border-border rounded-lg px-4 py-1">
-              {funnel.stages.map(s => <FunnelBar key={s.stage} stage={s} />)}
+              {funnel.stages.map(s => <FunnelBar key={s.stage} stage={s} total={funnel.stages[0]?.count ?? 0} />)}
             </div>
             {funnel.avg_days_to_response !== null && (
               <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-2">
