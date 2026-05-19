@@ -19,7 +19,7 @@ ai-os/
 │   └── frontend/src/
 │       ├── pages/         # One folder per feature area
 │       ├── Shell.tsx      # Sidebar nav — add links here
-│       └── main.tsx       # React Router routes
+│       └── App.tsx        # React Router routes
 ├── caddy/Caddyfile        # Caddy reverse proxy (systemd on VPS, NOT Docker)
 ├── docker-compose.yml     # Add new standalone services here
 └── .github/workflows/deploy.yml
@@ -83,31 +83,18 @@ docker compose exec aios alembic upgrade head
 
 ### 3. Frontend page
 
-Create `aios/frontend/src/pages/<Name>/index.tsx`:
-```tsx
-import { useEffect, useState } from 'react'
+Create `aios/frontend/src/pages/<Name>/index.tsx`. **Match the existing design system exactly** (see Design System section below).
 
-export default function Name() {
-  const [items, setItems] = useState([])
-
-  useEffect(() => {
-    fetch('/api/<name>/').then(r => r.json()).then(d => setItems(d.items ?? []))
-  }, [])
-
-  return <div>{/* render items */}</div>
-}
-```
-
-Add route in `aios/frontend/src/main.tsx`:
+Add route in `aios/frontend/src/App.tsx`:
 ```tsx
 import Name from './pages/Name'
-// inside <Routes>:
+// inside <Routes> under <Route element={<Shell />}>:
 <Route path="/<name>" element={<Name />} />
 ```
 
-Add nav link in `aios/frontend/src/Shell.tsx`:
+Add nav link in `aios/frontend/src/Shell.tsx` — add to the `WORKFLOWS` array:
 ```tsx
-<NavLink to="/<name>">Name</NavLink>
+{ label: 'Name', path: '/<name>', icon: SomeIcon },
 ```
 
 ### 4. Deploy
@@ -119,6 +106,112 @@ git push
 ```
 
 GitHub Actions `deploy-app` triggers automatically on `aios/**` changes.
+
+---
+
+## Design System
+
+The site uses shadcn/ui CSS tokens on a dark theme. **Never use custom colors, font imports, or inline styles.** Every new page must look indistinguishable from existing pages.
+
+### Color tokens (always use these)
+
+| Token | Use for |
+|---|---|
+| `text-foreground` | Primary text |
+| `text-muted-foreground` | Secondary/dim text |
+| `bg-background` | Page/input backgrounds |
+| `bg-muted/10`, `bg-muted/20` | Subtle section backgrounds, hover states |
+| `border-border` | All borders |
+| `border-border/50` | Lighter dividers |
+| `bg-foreground text-background` | Active/selected state (tabs, buttons) |
+| `text-destructive` | Danger/delete actions |
+
+### Typography
+
+- Body text: `text-sm` — standard size for all content
+- Labels/meta: `text-xs text-muted-foreground`
+- Badges: `text-[9px] font-mono uppercase tracking-widest`
+- Headings: `text-sm font-medium` (keep them small — this is a dense tool)
+
+### Layout patterns
+
+**Page wrapper** (must be full-height, scrollable list):
+```tsx
+<div className="flex flex-col h-full overflow-hidden">
+  {/* sticky header */}
+  <div className="sticky top-0 bg-background z-10 px-4 py-3 border-b border-border flex items-center justify-between">
+    <h1 className="text-sm font-medium">Page Title</h1>
+    <button className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground border border-border rounded-md px-2.5 py-1.5 hover:text-foreground hover:border-foreground/30 transition-colors">
+      <Plus size={12} /> Add
+    </button>
+  </div>
+  {/* scrollable content */}
+  <div className="flex-1 overflow-y-auto">
+    {/* list items */}
+  </div>
+</div>
+```
+
+**List rows** (group pattern for hover actions):
+```tsx
+<div className="group border-b border-border/50 hover:bg-muted/20 transition-colors">
+  <div className="px-4 py-3 flex items-start gap-3">
+    {/* content */}
+    <div className="flex items-center gap-1.5 shrink-0">
+      <button className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-foreground transition-all">
+        <Pencil size={12} />
+      </button>
+      <button className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-destructive transition-all">
+        <Trash2 size={12} />
+      </button>
+    </div>
+  </div>
+</div>
+```
+
+**Forms / input sections** (collapsible add panel):
+```tsx
+<div className="border-b border-border bg-muted/10 px-4 py-4 flex flex-col gap-3 shrink-0">
+  <textarea
+    className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-ring/30 resize-none"
+  />
+  <div className="flex justify-end">
+    <button
+      disabled={saving}
+      className="px-4 py-1.5 text-xs font-medium bg-foreground text-background rounded-md hover:opacity-80 transition-opacity disabled:opacity-40"
+    >
+      Save
+    </button>
+  </div>
+</div>
+```
+
+**Filter tabs**:
+```tsx
+<button className={cn(
+  'px-2.5 py-1 text-xs rounded-md transition-colors',
+  isActive ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground',
+)}>
+  Label
+</button>
+```
+
+**Badges** (category/status chips):
+```tsx
+<span className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded border border-border text-muted-foreground">
+  label
+</span>
+```
+
+### Imports
+
+Always import `cn` and lucide icons:
+```tsx
+import { cn } from '@/lib/utils'
+import { Plus, Trash2, Pencil, X } from 'lucide-react'
+```
+
+Never import external fonts, custom color palettes, or animation libraries. The site has no custom CSS beyond Tailwind.
 
 ---
 
@@ -202,7 +295,7 @@ git push
 
 ## VPS facts
 
-- **Host**: `46.225.78.10`, user `dima`
+- **Host**: `46.225.78.10`, user `dima`, pw `tenor1324`
 - **App directory**: `/home/dima/ai-os/`
 - **Caddy**: systemd service, NOT Docker. Reload: `sudo systemctl reload-or-restart caddy`
 - **Caddy config on VPS**: `/home/dima/ai-os/caddy/Caddyfile` (symlinked or copied — deploy-infra runs `git reset --hard` then reloads)

@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import db
-from routers import daily_log, home, ideas, jobsearch, proposals, webhooks, writing
+from routers import daily_log, home, ideas, jobsearch, webhooks, writing
 
 
 @asynccontextmanager
@@ -42,7 +42,6 @@ app.include_router(writing.router, prefix="/api/writing")
 app.include_router(daily_log.router, prefix="/api/daily-log")
 app.include_router(home.router, prefix="/api/home")
 app.include_router(ideas.router, prefix="/api/ideas")
-app.include_router(proposals.router, prefix="/api/proposals")
 app.include_router(webhooks.router, prefix="/webhooks")
 
 

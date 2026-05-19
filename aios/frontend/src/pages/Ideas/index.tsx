@@ -1,4 +1,6 @@
 import { KeyboardEvent, useEffect, useRef, useState } from 'react'
+import { ChevronDown, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 type Category = 'idea' | 'fix' | 'todo' | 'vision'
 type Status = 'open' | 'in_progress' | 'done'
@@ -14,17 +16,15 @@ interface Idea {
   updated_at: string
 }
 
-const CAT: Record<Category, { label: string; color: string; glyph: string }> = {
-  idea:   { label: 'IDEA',   color: '#f59e0b', glyph: '◆' },
-  fix:    { label: 'FIX',    color: '#ef4444', glyph: '◈' },
-  todo:   { label: 'TODO',   color: '#3b82f6', glyph: '◉' },
-  vision: { label: 'VISION', color: '#a78bfa', glyph: '◇' },
+const CATEGORIES: Category[] = ['idea', 'fix', 'todo', 'vision']
+const STATUSES: Status[] = ['open', 'in_progress', 'done']
+
+const CAT_LABEL: Record<Category, string> = {
+  idea: 'Idea', fix: 'Fix', todo: 'Todo', vision: 'Vision',
 }
 
-const STATUS_DOT: Record<Status, string> = {
-  open:        '#3a3a3a',
-  in_progress: '#f59e0b',
-  done:        '#22c55e',
+const STATUS_LABEL: Record<Status, string> = {
+  open: 'Open', in_progress: 'In Progress', done: 'Done',
 }
 
 const STATUS_CYCLE: Status[] = ['open', 'in_progress', 'done']
@@ -33,22 +33,216 @@ function cycleStatus(s: Status): Status {
   return STATUS_CYCLE[(STATUS_CYCLE.indexOf(s) + 1) % STATUS_CYCLE.length]
 }
 
-function fmt(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+function fmtDate(s: string) {
+  return new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-const MONO = "'JetBrains Mono', monospace"
+function CategoryBadge({ category }: { category: Category }) {
+  return (
+    <span className={cn(
+      'text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded border shrink-0',
+      category === 'fix'    && 'border-red-500/30 text-red-400',
+      category === 'todo'   && 'border-blue-500/30 text-blue-400',
+      category === 'vision' && 'border-violet-500/30 text-violet-400',
+      category === 'idea'   && 'border-border text-muted-foreground',
+    )}>
+      {CAT_LABEL[category]}
+    </span>
+  )
+}
+
+function StatusBadge({ status, onClick }: { status: Status; onClick: (e: React.MouseEvent) => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Click to advance status"
+      className={cn(
+        'text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded border transition-colors',
+        status === 'open'        && 'border-border text-muted-foreground hover:border-foreground/30',
+        status === 'in_progress' && 'border-amber-500/40 text-amber-500 hover:border-amber-500/70',
+        status === 'done'        && 'border-emerald-500/40 text-emerald-500 hover:border-emerald-500/70',
+      )}
+    >
+      {status === 'in_progress' ? 'In Progress' : STATUS_LABEL[status]}
+    </button>
+  )
+}
+
+function IdeaRow({ idea, onUpdate, onDelete }: {
+  idea: Idea
+  onUpdate: () => void
+  onDelete: (id: string) => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [eContent, setEContent] = useState(idea.content)
+  const [eCategory, setECategory] = useState<Category>(idea.category)
+  const [ePriority, setEPriority] = useState<Priority>(idea.priority)
+
+  async function patch(body: Partial<Idea>) {
+    await fetch(`/api/ideas/${idea.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    onUpdate()
+  }
+
+  async function saveEdit() {
+    setSaving(true)
+    try {
+      await patch({ content: eContent.trim(), category: eCategory, priority: ePriority })
+      setEditing(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (!confirm('Delete this idea?')) return
+    await fetch(`/api/ideas/${idea.id}`, { method: 'DELETE' })
+    onDelete(idea.id)
+  }
+
+  if (editing) {
+    return (
+      <div className="border-b border-border bg-muted/10 px-4 py-4 flex flex-col gap-3">
+        <textarea
+          autoFocus
+          value={eContent}
+          onChange={e => setEContent(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); saveEdit() }
+            if (e.key === 'Escape') setEditing(false)
+          }}
+          rows={3}
+          className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-ring/30 resize-none"
+        />
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex gap-1.5">
+            {CATEGORIES.map(cat => (
+              <button
+                key={cat}
+                onClick={() => setECategory(cat)}
+                className={cn(
+                  'px-2.5 py-1 text-xs rounded-md border transition-colors',
+                  eCategory === cat
+                    ? 'border-foreground text-foreground'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {CAT_LABEL[cat]}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-1.5 ml-auto">
+            {(['low', 'normal', 'high'] as Priority[]).map(p => (
+              <button
+                key={p}
+                onClick={() => setEPriority(p)}
+                className={cn(
+                  'px-2 py-1 text-xs rounded-md border transition-colors',
+                  ePriority === p
+                    ? 'border-foreground text-foreground'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={() => setEditing(false)}
+            className="px-3 py-1.5 text-xs text-muted-foreground border border-border rounded-md hover:text-foreground transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={saveEdit}
+            disabled={saving || !eContent.trim()}
+            className="px-4 py-1.5 text-xs font-medium bg-foreground text-background rounded-md hover:opacity-80 transition-opacity disabled:opacity-40"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  const isLong = idea.content.length > 120
+
+  return (
+    <div className="group border-b border-border/50 hover:bg-muted/20 transition-colors">
+      <div className="px-4 py-3 flex items-start gap-3">
+        {/* Content + meta */}
+        <button
+          onClick={() => isLong && setExpanded(v => !v)}
+          className={cn('flex-1 min-w-0 flex flex-col gap-1.5 text-left', !isLong && 'cursor-default')}
+        >
+          <p className={cn(
+            'text-sm leading-relaxed',
+            idea.status === 'done' && 'line-through text-muted-foreground',
+            !expanded && isLong && 'line-clamp-2',
+          )}>
+            {idea.content}
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <CategoryBadge category={idea.category} />
+            {idea.priority !== 'normal' && (
+              <span className={cn(
+                'text-[9px] font-mono uppercase tracking-widest',
+                idea.priority === 'high' ? 'text-red-400' : 'text-muted-foreground/50',
+              )}>
+                {idea.priority === 'high' ? '↑ high' : '↓ low'}
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground">{fmtDate(idea.created_at)}</span>
+          </div>
+        </button>
+
+        {/* Actions */}
+        <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+          <StatusBadge
+            status={idea.status}
+            onClick={e => { e.stopPropagation(); patch({ status: cycleStatus(idea.status) }) }}
+          />
+          <button
+            onClick={e => { e.stopPropagation(); setEContent(idea.content); setECategory(idea.category); setEPriority(idea.priority); setEditing(true); setExpanded(false) }}
+            className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-foreground transition-all"
+          >
+            <Pencil size={12} />
+          </button>
+          <button
+            onClick={handleDelete}
+            className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-destructive transition-all"
+          >
+            <Trash2 size={12} />
+          </button>
+          {isLong && (
+            <button onClick={() => setExpanded(v => !v)}>
+              <ChevronDown size={13} className={cn('text-muted-foreground transition-transform', expanded && 'rotate-180')} />
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function Ideas() {
   const [ideas, setIdeas] = useState<Idea[]>([])
+  const [loading, setLoading] = useState(true)
   const [input, setInput] = useState('')
   const [category, setCategory] = useState<Category>('idea')
   const [priority, setPriority] = useState<Priority>('normal')
+  const [showAdd, setShowAdd] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all')
   const [catFilter, setCatFilter] = useState<Category | 'all'>('all')
-  const [expanded, setExpanded] = useState<string | null>(null)
-  const [editing, setEditing] = useState<{ id: string; content: string } | null>(null)
-  const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => { load() }, [])
@@ -56,9 +250,10 @@ export default function Ideas() {
   async function load() {
     const d = await fetch('/api/ideas/').then(r => r.json())
     setIdeas(d.ideas ?? [])
+    setLoading(false)
   }
 
-  async function capture() {
+  async function save() {
     if (!input.trim() || saving) return
     setSaving(true)
     await fetch('/api/ideas/', {
@@ -68,30 +263,13 @@ export default function Ideas() {
     })
     setInput('')
     setSaving(false)
-    load()
-    inputRef.current?.focus()
-  }
-
-  async function patch(id: string, body: Partial<Idea>) {
-    await fetch(`/api/ideas/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    load()
-  }
-
-  async function remove(id: string) {
-    await fetch(`/api/ideas/${id}`, { method: 'DELETE' })
-    setExpanded(null)
+    setShowAdd(false)
     load()
   }
 
   function handleKey(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault()
-      capture()
-    }
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); save() }
+    if (e.key === 'Escape') { setShowAdd(false); setInput('') }
   }
 
   const filtered = ideas.filter(i => {
@@ -100,322 +278,129 @@ export default function Ideas() {
     return true
   })
 
-  const openCount = ideas.filter(i => i.status === 'open').length
-  const doneCount = ideas.filter(i => i.status === 'done').length
-
   return (
-    <div
-      style={{ fontFamily: MONO, backgroundColor: '#0a0a0a', color: '#d4d4d4' }}
-      className="flex flex-col min-h-full"
-    >
-      {/* ── Capture zone ──────────────────────────────────── */}
-      <div style={{ backgroundColor: '#0f0f0f', borderBottom: '1px solid #1c1c1c' }} className="px-4 pt-4 pb-3 flex flex-col gap-3">
-        {/* Top line */}
-        <div className="flex items-center justify-between">
-          <span style={{ fontSize: 10, letterSpacing: '0.2em', color: '#3a3a3a' }}>
-            AI OS · IDEAS
-          </span>
-          <span style={{ fontSize: 10, color: '#3a3a3a' }}>
-            {openCount} open · {doneCount} done
-          </span>
-        </div>
-
-        {/* Input */}
-        <textarea
-          ref={inputRef}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKey}
-          placeholder="capture a thought..."
-          rows={2}
-          style={{
-            fontFamily: MONO,
-            backgroundColor: 'transparent',
-            color: '#e8e8e8',
-            fontSize: 14,
-            lineHeight: 1.6,
-            resize: 'none',
-            outline: 'none',
-            border: 'none',
-            width: '100%',
-          }}
-        />
-
-        {/* Controls */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Category buttons */}
-          <div className="flex gap-1">
-            {(Object.entries(CAT) as [Category, typeof CAT[Category]][]).map(([key, c]) => (
-              <button
-                key={key}
-                onClick={() => setCategory(key)}
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 9,
-                  letterSpacing: '0.15em',
-                  padding: '2px 7px',
-                  borderRadius: 2,
-                  border: `1px solid ${c.color}`,
-                  color: category === key ? '#0a0a0a' : c.color,
-                  backgroundColor: category === key ? c.color : 'transparent',
-                  opacity: category === key ? 1 : 0.45,
-                  transition: 'all 0.1s',
-                  cursor: 'pointer',
-                }}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Priority */}
-          <div className="flex gap-1 ml-auto">
-            {(['low', 'normal', 'high'] as Priority[]).map(p => (
-              <button
-                key={p}
-                onClick={() => setPriority(p)}
-                style={{
-                  fontFamily: MONO,
-                  fontSize: 11,
-                  padding: '1px 6px',
-                  borderRadius: 2,
-                  border: '1px solid #222',
-                  color: priority === p ? '#e8e8e8' : '#3a3a3a',
-                  backgroundColor: priority === p ? '#1e1e1e' : 'transparent',
-                  cursor: 'pointer',
-                  transition: 'all 0.1s',
-                }}
-                title={p}
-              >
-                {p === 'low' ? '↓' : p === 'normal' ? '·' : '↑'}
-              </button>
-            ))}
-          </div>
-
-          {/* Save */}
-          <button
-            onClick={capture}
-            disabled={!input.trim() || saving}
-            style={{
-              fontFamily: MONO,
-              fontSize: 9,
-              letterSpacing: '0.15em',
-              padding: '3px 10px',
-              borderRadius: 2,
-              border: 'none',
-              color: '#0a0a0a',
-              backgroundColor: input.trim() ? CAT[category].color : '#222',
-              cursor: input.trim() ? 'pointer' : 'default',
-              opacity: saving ? 0.5 : 1,
-              transition: 'all 0.15s',
-            }}
-          >
-            {saving ? '...' : '⌘↵ SAVE'}
-          </button>
-        </div>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="sticky top-0 bg-background z-10 px-4 py-3 border-b border-border flex items-center justify-between">
+        <h1 className="text-sm font-medium">Ideas</h1>
+        <button
+          onClick={() => { setShowAdd(v => !v); setTimeout(() => inputRef.current?.focus(), 50) }}
+          className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground border border-border rounded-md px-2.5 py-1.5 hover:text-foreground hover:border-foreground/30 transition-colors"
+        >
+          {showAdd ? <><X size={12} /> Cancel</> : <><Plus size={12} /> Add</>}
+        </button>
       </div>
 
-      {/* ── Filter bar ───────────────────────────────────── */}
-      <div
-        style={{ borderBottom: '1px solid #161616', overflowX: 'auto' }}
-        className="flex gap-4 px-4 py-2 shrink-0"
-      >
-        {(['all', 'open', 'in_progress', 'done'] as const).map(s => (
+      {/* Add form */}
+      {showAdd && (
+        <div className="border-b border-border bg-muted/10 px-4 py-4 flex flex-col gap-3 shrink-0">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKey}
+            placeholder="What's on your mind? (⌘↵ to save)"
+            rows={3}
+            className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm placeholder:text-muted-foreground outline-none focus:ring-1 focus:ring-ring/30 resize-none"
+          />
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex gap-1.5">
+              {CATEGORIES.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setCategory(cat)}
+                  className={cn(
+                    'px-2.5 py-1 text-xs rounded-md border transition-colors',
+                    category === cat
+                      ? 'border-foreground text-foreground'
+                      : 'border-border text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {CAT_LABEL[cat]}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-1.5 ml-auto">
+              {(['low', 'normal', 'high'] as Priority[]).map(p => (
+                <button
+                  key={p}
+                  onClick={() => setPriority(p)}
+                  className={cn(
+                    'px-2 py-1 text-xs rounded-md border transition-colors',
+                    priority === p
+                      ? 'border-foreground text-foreground'
+                      : 'border-border text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button
+              onClick={save}
+              disabled={saving || !input.trim()}
+              className="px-4 py-1.5 text-xs font-medium bg-foreground text-background rounded-md hover:opacity-80 transition-opacity disabled:opacity-40"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="flex items-center gap-1 px-4 py-2 border-b border-border shrink-0 flex-wrap">
+        {(['all', ...STATUSES] as const).map(s => (
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
-            style={{
-              fontFamily: MONO,
-              fontSize: 9,
-              letterSpacing: '0.15em',
-              whiteSpace: 'nowrap',
-              color: statusFilter === s ? '#e8e8e8' : '#363636',
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              padding: 0,
-              transition: 'color 0.1s',
-            }}
+            className={cn(
+              'px-2.5 py-1 text-xs rounded-md transition-colors',
+              statusFilter === s
+                ? 'bg-foreground text-background'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
           >
-            {s === 'in_progress' ? 'IN PROGRESS' : s.toUpperCase()}
+            {s === 'all' ? 'All' : s === 'in_progress' ? 'In Progress' : STATUS_LABEL[s]}
           </button>
         ))}
-        <span style={{ color: '#1e1e1e', userSelect: 'none' }}>|</span>
-        {(Object.entries(CAT) as [Category, typeof CAT[Category]][]).map(([key, c]) => (
+        <span className="text-muted-foreground/30 mx-1 select-none">·</span>
+        {CATEGORIES.map(cat => (
           <button
-            key={key}
-            onClick={() => setCatFilter(catFilter === key ? 'all' : key)}
-            style={{
-              fontFamily: MONO,
-              fontSize: 9,
-              letterSpacing: '0.12em',
-              whiteSpace: 'nowrap',
-              color: catFilter === key ? c.color : '#363636',
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              padding: 0,
-              transition: 'color 0.1s',
-            }}
+            key={cat}
+            onClick={() => setCatFilter(catFilter === cat ? 'all' : cat)}
+            className={cn(
+              'px-2.5 py-1 text-xs rounded-md transition-colors',
+              catFilter === cat
+                ? 'bg-foreground text-background'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
           >
-            {c.glyph} {c.label}
+            {CAT_LABEL[cat]}
           </button>
         ))}
+        <span className="ml-auto text-xs text-muted-foreground font-mono">{filtered.length}</span>
       </div>
 
-      {/* ── List ─────────────────────────────────────────── */}
-      <div className="flex-1">
-        {filtered.length === 0 && (
-          <div style={{ color: '#2a2a2a', fontSize: 11, letterSpacing: '0.1em' }} className="py-16 text-center">
-            NOTHING HERE
+      {/* List */}
+      <div className="flex-1 overflow-y-auto">
+        {loading && <p className="px-4 py-6 text-sm text-muted-foreground">Loading…</p>}
+        {!loading && filtered.length === 0 && (
+          <div className="px-4 py-12 text-center">
+            <p className="text-sm text-muted-foreground">
+              {ideas.length === 0 ? 'No ideas yet. Hit Add to capture one.' : 'No matches.'}
+            </p>
           </div>
         )}
-        {filtered.map(idea => {
-          const cat = CAT[idea.category]
-          const isOpen = expanded === idea.id
-          const isEditing = editing?.id === idea.id
-          const isDone = idea.status === 'done'
-
-          return (
-            <div
-              key={idea.id}
-              onClick={() => !isEditing && setExpanded(isOpen ? null : idea.id)}
-              style={{
-                borderBottom: '1px solid #141414',
-                borderLeft: `2px solid ${isOpen ? cat.color : 'transparent'}`,
-                backgroundColor: isOpen ? '#0d0d0d' : 'transparent',
-                cursor: 'pointer',
-                transition: 'all 0.1s',
-                padding: '12px 16px',
-              }}
-            >
-              <div className="flex items-start gap-3">
-                {/* Glyph */}
-                <span style={{ color: cat.color, fontSize: 12, marginTop: 1, flexShrink: 0, userSelect: 'none' }}>
-                  {cat.glyph}
-                </span>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  {isEditing ? (
-                    <textarea
-                      autoFocus
-                      value={editing.content}
-                      onChange={e => setEditing({ ...editing, content: e.target.value })}
-                      onClick={e => e.stopPropagation()}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                          e.preventDefault()
-                          patch(idea.id, { content: editing.content })
-                          setEditing(null)
-                        }
-                        if (e.key === 'Escape') setEditing(null)
-                      }}
-                      rows={3}
-                      style={{
-                        fontFamily: MONO,
-                        fontSize: 13,
-                        lineHeight: 1.6,
-                        width: '100%',
-                        backgroundColor: '#1a1a1a',
-                        color: '#e8e8e8',
-                        border: '1px solid #2a2a2a',
-                        borderRadius: 3,
-                        padding: '6px 8px',
-                        outline: 'none',
-                        resize: 'none',
-                      }}
-                    />
-                  ) : (
-                    <p
-                      style={{
-                        fontSize: 13,
-                        lineHeight: 1.6,
-                        color: isDone ? '#383838' : '#d4d4d4',
-                        textDecoration: isDone ? 'line-through' : 'none',
-                        margin: 0,
-                        display: '-webkit-box',
-                        WebkitLineClamp: isOpen ? undefined : 2,
-                        WebkitBoxOrient: 'vertical' as const,
-                        overflow: isOpen ? 'visible' : 'hidden',
-                      }}
-                    >
-                      {idea.content}
-                    </p>
-                  )}
-
-                  {/* Meta */}
-                  <div style={{ display: 'flex', gap: 10, marginTop: 5, fontSize: 10, color: '#303030', alignItems: 'center' }}>
-                    <span>{fmt(idea.created_at)}</span>
-                    {idea.priority === 'high' && <span style={{ color: '#7a2020' }}>↑ high</span>}
-                    {idea.priority === 'low'  && <span style={{ color: '#2a3a2a' }}>↓ low</span>}
-                    {isOpen && !isEditing && (
-                      <div style={{ display: 'flex', gap: 10, marginLeft: 4 }} onClick={e => e.stopPropagation()}>
-                        <button
-                          onClick={() => setEditing({ id: idea.id, content: idea.content })}
-                          style={{ fontFamily: MONO, fontSize: 10, color: '#404040', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                          onMouseOver={e => (e.currentTarget.style.color = '#e8e8e8')}
-                          onMouseOut={e => (e.currentTarget.style.color = '#404040')}
-                        >
-                          edit
-                        </button>
-                        <button
-                          onClick={() => remove(idea.id)}
-                          style={{ fontFamily: MONO, fontSize: 10, color: '#404040', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                          onMouseOver={e => (e.currentTarget.style.color = '#ef4444')}
-                          onMouseOut={e => (e.currentTarget.style.color = '#404040')}
-                        >
-                          del
-                        </button>
-                        {/* Category switcher */}
-                        <div style={{ display: 'flex', gap: 4, marginLeft: 4 }}>
-                          {(Object.entries(CAT) as [Category, typeof CAT[Category]][]).map(([key, c]) => (
-                            <button
-                              key={key}
-                              onClick={() => patch(idea.id, { category: key })}
-                              style={{
-                                fontFamily: MONO,
-                                fontSize: 9,
-                                padding: '1px 5px',
-                                borderRadius: 2,
-                                border: `1px solid ${c.color}`,
-                                color: idea.category === key ? '#0a0a0a' : c.color,
-                                backgroundColor: idea.category === key ? c.color : 'transparent',
-                                opacity: idea.category === key ? 1 : 0.35,
-                                cursor: 'pointer',
-                                background: 'none',
-                              }}
-                            >
-                              {c.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Status dot — click to cycle */}
-                <button
-                  onClick={e => { e.stopPropagation(); patch(idea.id, { status: cycleStatus(idea.status) }) }}
-                  title={`${idea.status} → click to advance`}
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    backgroundColor: STATUS_DOT[idea.status],
-                    border: 'none',
-                    cursor: 'pointer',
-                    flexShrink: 0,
-                    marginTop: 6,
-                    boxShadow: idea.status === 'in_progress' ? `0 0 8px ${STATUS_DOT[idea.status]}` : 'none',
-                    transition: 'all 0.2s',
-                  }}
-                />
-              </div>
-            </div>
-          )
-        })}
+        {filtered.map(idea => (
+          <IdeaRow
+            key={idea.id}
+            idea={idea}
+            onUpdate={load}
+            onDelete={id => setIdeas(prev => prev.filter(i => i.id !== id))}
+          />
+        ))}
       </div>
     </div>
   )
