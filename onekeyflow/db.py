@@ -142,9 +142,11 @@ def update_month(id: int, entry: dict) -> dict | None:
 
 def delete_month(id: int) -> None:
     conn = _connect()
-    conn.execute("DELETE FROM monthly_pl WHERE id=?", (id,))
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute("DELETE FROM monthly_pl WHERE id=?", (id,))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -153,50 +155,60 @@ def delete_month(id: int) -> None:
 
 def create_event(id: str, type: str, payload: dict) -> None:
     conn = _connect()
-    conn.execute(
-        "INSERT INTO events (id, type, payload, created_at) VALUES (?,?,?,?)",
-        (id, type, json.dumps(payload), _now()),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            "INSERT INTO events (id, type, payload, created_at) VALUES (?,?,?,?)",
+            (id, type, json.dumps(payload), _now()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def start_event(id: str) -> None:
     conn = _connect()
-    conn.execute(
-        "UPDATE events SET status='processing', started_at=? WHERE id=?",
-        (_now(), id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            "UPDATE events SET status='processing', started_at=? WHERE id=?",
+            (_now(), id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def complete_event(id: str, result: dict) -> None:
     conn = _connect()
-    conn.execute(
-        "UPDATE events SET status='done', result=?, completed_at=? WHERE id=?",
-        (json.dumps(result), _now(), id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            "UPDATE events SET status='done', result=?, completed_at=? WHERE id=?",
+            (json.dumps(result), _now(), id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def fail_event(id: str, error: str) -> None:
     conn = _connect()
-    conn.execute(
-        "UPDATE events SET status='failed', error=?, completed_at=? WHERE id=?",
-        (error, _now(), id),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            "UPDATE events SET status='failed', error=?, completed_at=? WHERE id=?",
+            (error, _now(), id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def list_events(limit: int = 100) -> list[dict]:
     conn = _connect()
-    rows = conn.execute(
-        "SELECT * FROM events ORDER BY created_at DESC LIMIT ?", (limit,)
-    ).fetchall()
-    conn.close()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM events ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+    finally:
+        conn.close()
     result = []
     for row in rows:
         d = dict(row)
