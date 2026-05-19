@@ -186,13 +186,13 @@ function NoteRow({ note, onUpdate, onDelete }: {
           )}
           <button
             onClick={startEdit}
-            className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-foreground transition-all"
+            className="p-1.5 rounded text-muted-foreground hover:text-foreground transition-colors md:opacity-0 md:group-hover:opacity-100"
           >
             <Pencil size={12} />
           </button>
           <button
             onClick={handleDelete}
-            className="opacity-0 group-hover:opacity-100 p-1 rounded text-muted-foreground hover:text-destructive transition-all"
+            className="p-1.5 rounded text-muted-foreground hover:text-destructive transition-colors md:opacity-0 md:group-hover:opacity-100"
           >
             <Trash2 size={12} />
           </button>
