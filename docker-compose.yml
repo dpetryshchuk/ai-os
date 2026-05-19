@@ -42,7 +42,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       DATA_DIR: /app/data
     volumes:
-      - ./onekeyflow/okf.db:/app/data/okf.db
+      - okf_data:/app/data
     networks:
       - internal
     restart: unless-stopped
@@ -57,7 +57,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       DATA_DIR: /app/data
     volumes:
-      - ./onekeyflow/okf.db:/app/data/okf.db
+      - okf_data:/app/data
     networks:
       - internal
     restart: unless-stopped
@@ -125,3 +125,4 @@ networks:
 volumes:
   postgres_data:
   jobsearch_uploads:
+  okf_data:
