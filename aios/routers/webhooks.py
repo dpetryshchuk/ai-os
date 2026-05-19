@@ -1,5 +1,3 @@
-import hmac
-import hashlib
 from typing import Callable
 
 import asyncpg
@@ -7,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 import db
 import events as ev
-from config import settings
+from schemas import WebhookResponse
 from tasks import process_event
 
 router = APIRouter()
@@ -40,7 +38,7 @@ async def receive_webhook(
     source: str,
     request: Request,
     pool: asyncpg.Pool = Depends(db.get_jobsearch_pool),
-):
+) -> WebhookResponse:
     body = await request.body()
     try:
         payload = await request.json()
@@ -52,4 +50,4 @@ async def receive_webhook(
     event_id = await ev.create(pool, source="webhook", type=f"{source}.received", payload=payload)
     process_event.delay(event_id)
 
-    return {"ok": True, "event_id": event_id}
+    return WebhookResponse(event_id=event_id)

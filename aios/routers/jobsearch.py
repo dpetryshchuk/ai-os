@@ -1,7 +1,7 @@
 import json
 import os
+import secrets
 import shutil
-from typing import Any
 
 import asyncpg
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -10,29 +10,44 @@ from fastapi.responses import StreamingResponse
 import db
 from agent import agentic_stream
 from config import settings
+from schemas import (
+    AgentStreamRequest,
+    ApplicationsResponse,
+    ApplicationRow,
+    ContentPostRow,
+    ContentResponse,
+    EventsResponse,
+    LeadsResponse,
+    LeadRow,
+    NoteCreate,
+    NoteResponse,
+    NoteRow,
+    NotesResponse,
+    NoteUpdate,
+    OkResponse,
+    OsEventRow,
+    PipelineResponse,
+    ContactRow,
+    RetroResponse,
+    WeeklyCount,
+    DailyCount,
+    SourceStat,
+    NeedsActionContact,
+    RetroStats,
+    ResumeResponse,
+    TriggerResponse,
+)
 
 router = APIRouter()
-
-
-def _row(record) -> dict[str, Any]:
-    d = dict(record)
-    for k, v in d.items():
-        if hasattr(v, "isoformat"):
-            d[k] = v.isoformat()
-    return d
 
 
 # ── Agent SSE stream ──────────────────────────────────────────────────────────
 
 @router.post("/agents/stream")
-async def agent_stream(body: dict, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
-    messages = body.get("messages")
-    if not messages:
-        raise HTTPException(400, "messages required")
-
+async def agent_stream(body: AgentStreamRequest, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
     async def generate():
         try:
-            async for chunk in agentic_stream(messages, pool):
+            async for chunk in agentic_stream(body.messages, pool):
                 yield chunk
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'payload': {'message': str(e)}})}\n\n"
@@ -48,7 +63,7 @@ async def agent_stream(body: dict, pool: asyncpg.Pool = Depends(db.get_jobsearch
 # ── Pipeline ──────────────────────────────────────────────────────────────────
 
 @router.get("/pipeline")
-async def get_pipeline(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
+async def get_pipeline(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> PipelineResponse:
     rows = await pool.fetch("""
         SELECT
           c.id, c.name, c.role, c.source, c.stage, c.notes,
@@ -67,13 +82,13 @@ async def get_pipeline(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
             ELSE 5
           END, c.name
     """)
-    return {"ok": True, "contacts": [_row(r) for r in rows]}
+    return PipelineResponse(contacts=[ContactRow.model_validate(dict(r)) for r in rows])
 
 
 # ── Retro ──────────────────────────────────────────────────────────────────────
 
 @router.get("/retro")
-async def get_retro(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
+async def get_retro(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> RetroResponse:
     import asyncio
     weekly, daily, by_source, needs_action, stats = await asyncio.gather(
         pool.fetch("""
@@ -112,20 +127,19 @@ async def get_retro(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
             LEFT JOIN job_postings jp ON jp.status = 'applied'
         """),
     )
-    return {
-        "ok": True,
-        "weekly": [_row(r) for r in weekly],
-        "daily": [_row(r) for r in daily],
-        "by_source": [_row(r) for r in by_source],
-        "needs_action": [_row(r) for r in needs_action],
-        "stats": _row(stats) if stats else {},
-    }
+    return RetroResponse(
+        weekly=[WeeklyCount.model_validate(dict(r)) for r in weekly],
+        daily=[DailyCount.model_validate(dict(r)) for r in daily],
+        by_source=[SourceStat.model_validate(dict(r)) for r in by_source],
+        needs_action=[NeedsActionContact.model_validate(dict(r)) for r in needs_action],
+        stats=RetroStats.model_validate(dict(stats)) if stats else RetroStats(),
+    )
 
 
 # ── Leads ──────────────────────────────────────────────────────────────────────
 
 @router.get("/leads")
-async def get_leads(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
+async def get_leads(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> LeadsResponse:
     rows = await pool.fetch("""
         SELECT jp.id, jp.title, jp.link, jp.source, jp.status, co.name AS company_name, co.website
         FROM job_postings jp
@@ -133,13 +147,13 @@ async def get_leads(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
         WHERE jp.status = 'new'
         ORDER BY jp.id DESC
     """)
-    return {"ok": True, "leads": [_row(r) for r in rows]}
+    return LeadsResponse(leads=[LeadRow.model_validate(dict(r)) for r in rows])
 
 
 # ── Applications ───────────────────────────────────────────────────────────────
 
 @router.get("/applications")
-async def get_applications(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
+async def get_applications(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> ApplicationsResponse:
     rows = await pool.fetch("""
         SELECT jp.id, jp.title, jp.link, jp.source, jp.status, jp.resume_path,
                co.name AS company_name, co.website
@@ -148,13 +162,13 @@ async def get_applications(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
         WHERE jp.status = 'applied'
         ORDER BY jp.id DESC
     """)
-    return {"ok": True, "applications": [_row(r) for r in rows]}
+    return ApplicationsResponse(applications=[ApplicationRow.model_validate(dict(r)) for r in rows])
 
 
 # ── Notes ──────────────────────────────────────────────────────────────────────
 
 @router.get("/notes")
-async def get_notes(q: str = "", pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
+async def get_notes(q: str = "", pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> NotesResponse:
     if q:
         rows = await pool.fetch(
             "SELECT id, category, title, url, content, created_at FROM notes "
@@ -166,23 +180,22 @@ async def get_notes(q: str = "", pool: asyncpg.Pool = Depends(db.get_jobsearch_p
         rows = await pool.fetch(
             "SELECT id, category, title, url, content, created_at FROM notes ORDER BY created_at DESC"
         )
-    return {"ok": True, "notes": [_row(r) for r in rows]}
+    return NotesResponse(notes=[NoteRow.model_validate(dict(r)) for r in rows])
 
 
-@router.post("/notes")
-async def create_note(body: dict, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
-    import secrets
+@router.post("/notes", status_code=201)
+async def create_note(body: NoteCreate, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> NoteResponse:
     nid = secrets.token_hex(8)
     row = await pool.fetchrow(
         "INSERT INTO notes (id, category, title, url, content) VALUES ($1,$2,$3,$4,$5) "
         "RETURNING id, category, title, url, content, created_at",
-        nid, body.get("category", "note"), body.get("title"), body.get("url"), body.get("content"),
+        nid, body.category, body.title, body.url, body.content,
     )
-    return {"ok": True, "note": _row(row)}
+    return NoteResponse(note=NoteRow.model_validate(dict(row)))
 
 
 @router.patch("/notes/{note_id}")
-async def update_note(note_id: str, body: dict, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
+async def update_note(note_id: str, body: NoteUpdate, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> NoteResponse:
     row = await pool.fetchrow(
         """UPDATE notes SET
              category = COALESCE($2, category),
@@ -191,60 +204,60 @@ async def update_note(note_id: str, body: dict, pool: asyncpg.Pool = Depends(db.
              content  = COALESCE($5, content)
            WHERE id = $1
            RETURNING id, category, title, url, content, created_at""",
-        note_id, body.get("category"), body.get("title"), body.get("url"), body.get("content"),
+        note_id, body.category, body.title, body.url, body.content,
     )
     if not row:
         raise HTTPException(404, "Note not found")
-    return {"ok": True, "note": _row(row)}
+    return NoteResponse(note=NoteRow.model_validate(dict(row)))
 
 
 @router.delete("/notes/{note_id}")
-async def delete_note(note_id: str, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
+async def delete_note(note_id: str, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> OkResponse:
     await pool.execute("DELETE FROM notes WHERE id = $1", note_id)
-    return {"ok": True}
+    return OkResponse()
 
 
 # ── Resumes ────────────────────────────────────────────────────────────────────
 
 @router.post("/resumes")
-async def upload_resume(file: UploadFile = File(...)):
+async def upload_resume(file: UploadFile = File(...)) -> ResumeResponse:
     os.makedirs(settings.uploads_dir, exist_ok=True)
     dest = os.path.join(settings.uploads_dir, file.filename)
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
-    return {"ok": True, "path": dest}
+    return ResumeResponse(path=dest)
 
 
 # ── Content ────────────────────────────────────────────────────────────────────
 
 @router.get("/content")
-async def get_content(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
+async def get_content(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> ContentResponse:
     rows = await pool.fetch(
         "SELECT id, posted_date, content, impressions, engagements, comments "
         "FROM content_posts ORDER BY posted_date DESC"
     )
-    return {"ok": True, "posts": [_row(r) for r in rows]}
+    return ContentResponse(posts=[ContentPostRow.model_validate(dict(r)) for r in rows])
 
 
-# ── Events (os_events read for the events page) ───────────────────────────────
+# ── Events ─────────────────────────────────────────────────────────────────────
 
 @router.get("/events")
 async def get_os_events(
     limit: int = 50,
     pool: asyncpg.Pool = Depends(db.get_jobsearch_pool),
-):
+) -> EventsResponse:
     rows = await pool.fetch(
         "SELECT id, source, type, status, error, created_at, started_at, completed_at "
         "FROM os_events ORDER BY created_at DESC LIMIT $1",
         limit,
     )
-    return {"ok": True, "events": [_row(r) for r in rows]}
+    return EventsResponse(events=[OsEventRow.model_validate(dict(r)) for r in rows])
 
 
-# ── Trigger (UI-triggered tasks) ──────────────────────────────────────────────
+# ── Trigger ────────────────────────────────────────────────────────────────────
 
 @router.post("/trigger/{task_type}")
-async def trigger_task(task_type: str, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)):
+async def trigger_task(task_type: str, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> TriggerResponse:
     allowed = {"scrape.yc", "scrape.hn", "scrape.remoteok", "scrape.simplify", "health.check"}
     if task_type not in allowed:
         raise HTTPException(400, f"Unknown task type: {task_type}")
@@ -252,4 +265,4 @@ async def trigger_task(task_type: str, pool: asyncpg.Pool = Depends(db.get_jobse
     from tasks import process_event
     eid = await ev.create(pool, source="ui", type=task_type, payload={})
     process_event.delay(eid)
-    return {"ok": True, "event_id": eid}
+    return TriggerResponse(event_id=eid)
