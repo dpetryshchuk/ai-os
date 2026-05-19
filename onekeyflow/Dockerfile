@@ -13,7 +13,9 @@ WORKDIR /app
 COPY onekeyflow/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY onekeyflow/main.py .
+COPY onekeyflow/*.py .
+COPY onekeyflow/routers ./routers
+COPY onekeyflow/prompts ./prompts
 
 COPY --from=frontend-builder /app/onekeyflow/public ./public
 
