@@ -403,6 +403,40 @@ class IdeaResponse(OkResponse):
     idea: IdeaRow
 
 
+# ─── Look — requests ─────────────────────────────────────────────────────────
+
+
+class LookItemCreate(BaseModel):
+    category: str
+    note: str | None = None
+    source: str | None = None
+
+
+# ─── Look — rows ──────────────────────────────────────────────────────────────
+
+
+class LookItemRow(BaseModel):
+    id: str
+    category: str
+    media_type: str
+    file_path: str
+    mime_type: str | None = None
+    note: str | None = None
+    source: str | None = None
+    created_at: datetime | None = None
+
+
+# ─── Look — responses ─────────────────────────────────────────────────────────
+
+
+class LookItemsResponse(OkResponse):
+    items: list[LookItemRow]
+
+
+class LookItemResponse(OkResponse):
+    item: LookItemRow
+
+
 # ─── Home — rows ──────────────────────────────────────────────────────────────
 
 

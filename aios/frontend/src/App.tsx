@@ -12,6 +12,7 @@ import Essays from './pages/Writing/Essays'
 import Freewrite from './pages/Writing/Freewrite'
 import DailyLog from './pages/DailyLog'
 import Ideas from './pages/Ideas'
+import Look from './pages/Look'
 
 export default function App() {
   return (
@@ -35,6 +36,7 @@ export default function App() {
             <Route path="freewrite" element={<Freewrite />} />
           </Route>
           <Route path="daily-log" element={<DailyLog />} />
+          <Route path="look" element={<Look />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -38,3 +38,8 @@ log.dmytropetryshchuk.com {
   import auth
   redir https://home.dmytropetryshchuk.com/daily-log 302
 }
+
+look.dmytropetryshchuk.com {
+  import auth
+  redir https://home.dmytropetryshchuk.com/look 302
+}
