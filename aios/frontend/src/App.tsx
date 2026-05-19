@@ -11,6 +11,7 @@ import Retro from './pages/JobSearch/Retro'
 import Essays from './pages/Writing/Essays'
 import Freewrite from './pages/Writing/Freewrite'
 import DailyLog from './pages/DailyLog'
+import Proposals from './pages/Proposals'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
         <Route element={<Shell />}>
           <Route index element={<Home />} />
           <Route path="events" element={<EventsPage />} />
+          <Route path="proposals" element={<Proposals />} />
           <Route path="jobsearch">
             <Route index element={<Navigate to="chat" replace />} />
             <Route path="chat" element={<Chat />} />

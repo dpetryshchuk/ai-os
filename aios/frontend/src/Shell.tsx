@@ -12,6 +12,7 @@ import {
   TrendingUp,
   Users,
   Zap,
+  ClipboardList,
 } from 'lucide-react'
 import { cn } from './lib/utils'
 
@@ -48,6 +49,7 @@ const WORKFLOWS: WorkflowSection[] = [
     ],
   },
   { label: 'Daily Log', path: '/daily-log', icon: CalendarDays },
+  { label: 'Proposals', path: '/proposals', icon: ClipboardList },
 ]
 
 function NavItem({ item }: { item: WorkflowSection }) {
