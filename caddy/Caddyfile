@@ -17,21 +17,24 @@ home.dmytropetryshchuk.com {
   }
 }
 
-jobsearch.dmytropetryshchuk.com {
-  redir https://home.dmytropetryshchuk.com/jobsearch/pipeline 302
-}
-
-write.dmytropetryshchuk.com {
-  redir https://home.dmytropetryshchuk.com/writing/essays 302
-}
-
-log.dmytropetryshchuk.com {
-  redir https://home.dmytropetryshchuk.com/daily-log 302
-}
-
 os.onekeyflow.com {
   import auth
   reverse_proxy localhost:4116 {
     flush_interval -1
   }
+}
+
+jobsearch.dmytropetryshchuk.com {
+  import auth
+  redir https://home.dmytropetryshchuk.com/jobsearch/pipeline 302
+}
+
+write.dmytropetryshchuk.com {
+  import auth
+  redir https://home.dmytropetryshchuk.com/writing/essays 302
+}
+
+log.dmytropetryshchuk.com {
+  import auth
+  redir https://home.dmytropetryshchuk.com/daily-log 302
 }
