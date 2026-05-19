@@ -42,7 +42,7 @@ def build_payload(req: dict, proposal: dict) -> dict:
                 "email": req.get("email", ""),
                 "first_name": req.get("firstName", ""),
                 "last_name": req.get("lastName", ""),
-                "role": "Signer",
+                "role": "Client",
             }
         ],
         "tokens": tokens,
