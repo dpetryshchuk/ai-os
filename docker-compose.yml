@@ -38,12 +38,31 @@ services:
     environment:
       PORT: "4117"
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      PANDADOC_API_KEY: ${PANDADOC_API_KEY}
+      REDIS_URL: redis://redis:6379/0
       DATA_DIR: /app/data
     volumes:
       - ./onekeyflow/okf.db:/app/data/okf.db
     networks:
       - internal
     restart: unless-stopped
+
+  onekeyflow-worker:
+    image: ghcr.io/dpetryshchuk/ai-os/onekeyflow:latest
+    command: celery -A tasks worker --loglevel=info
+    working_dir: /app
+    environment:
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      PANDADOC_API_KEY: ${PANDADOC_API_KEY}
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /app/data
+    volumes:
+      - ./onekeyflow/okf.db:/app/data/okf.db
+    networks:
+      - internal
+    restart: unless-stopped
+    depends_on:
+      - redis
 
   celery-worker:
     image: ghcr.io/dpetryshchuk/ai-os/aios:latest
