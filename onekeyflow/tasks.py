@@ -14,6 +14,7 @@ celery_app = Celery(
     broker=config.REDIS_URL,
     backend=config.REDIS_URL,
 )
+celery_app.conf.task_default_queue = "okf"
 
 
 def _load_prompts() -> dict:
