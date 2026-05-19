@@ -1,9 +1,10 @@
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import db
@@ -49,5 +50,14 @@ async def health():
     return {"ok": True, "status": "healthy"}
 
 
-if os.path.exists("public"):
-    app.mount("/", StaticFiles(directory="public", html=True), name="static")
+_PUBLIC = Path("public")
+
+if _PUBLIC.exists():
+    app.mount("/assets", StaticFiles(directory=_PUBLIC / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def spa(full_path: str) -> FileResponse:
+        candidate = _PUBLIC / full_path
+        if candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_PUBLIC / "index.html")
