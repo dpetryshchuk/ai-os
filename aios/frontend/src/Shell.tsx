@@ -7,6 +7,7 @@ import {
   CalendarDays,
   FileText,
   Home,
+  Lightbulb,
   Menu,
   MessageSquare,
   PenLine,
@@ -29,6 +30,7 @@ type WorkflowSection = {
 const WORKFLOWS: WorkflowSection[] = [
   { label: 'Home', path: '/', icon: Home },
   { label: 'Events', path: '/events', icon: Activity },
+  { label: 'Ideas', path: '/ideas', icon: Lightbulb },
   {
     label: 'Job Search',
     path: '/jobsearch',
