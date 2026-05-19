@@ -138,11 +138,18 @@ export default function Leads() {
 
             {/* Desktop */}
             <div className="hidden md:block">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm table-fixed">
+                <colgroup>
+                  <col />{/* Role — takes remaining space */}
+                  <col className="w-36" />{/* Company */}
+                  <col className="w-28" />{/* Location */}
+                  <col className="w-20" />{/* Source */}
+                  <col className="w-10" />{/* Link */}
+                </colgroup>
                 <thead className="sticky top-0 bg-background z-10">
                   <tr className="border-b border-border">
                     {['Role', 'Company', 'Location', 'Source', ''].map(h => (
-                      <th key={h} className="text-left py-2 px-4 text-[10px] font-mono uppercase tracking-widest text-muted-foreground font-normal whitespace-nowrap">
+                      <th key={h} className="text-left py-2 px-4 text-[10px] font-mono uppercase tracking-widest text-muted-foreground font-normal">
                         {h}
                       </th>
                     ))}
@@ -151,24 +158,24 @@ export default function Leads() {
                 <tbody>
                   {filtered.map(lead => (
                     <tr key={lead.id} className="border-b border-border/40 hover:bg-muted/20 transition-colors group">
-                      <td className="py-2.5 px-4 font-medium max-w-xs">
-                        <div className="flex items-center gap-2">
+                      <td className="py-2.5 px-4 font-medium">
+                        <div className="flex items-center gap-2 min-w-0">
                           {isNew(lead.scraped_at) && (
                             <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-500" title="Added today" />
                           )}
                           <span className="truncate">{lead.title}</span>
                         </div>
                       </td>
-                      <td className="py-2.5 px-4 text-muted-foreground whitespace-nowrap">
+                      <td className="py-2.5 px-4 text-muted-foreground truncate">
                         {lead.company_name ?? '—'}
                       </td>
-                      <td className="py-2.5 px-4 text-muted-foreground whitespace-nowrap text-xs">
+                      <td className="py-2.5 px-4 text-muted-foreground text-xs truncate">
                         {shortLocation(lead.location) || '—'}
                       </td>
                       <td className="py-2.5 px-4">
                         <SourceBadge source={lead.source} />
                       </td>
-                      <td className="py-2.5 px-4 w-8">
+                      <td className="py-2.5 px-4">
                         {lead.link && (
                           <a href={lead.link} target="_blank" rel="noopener noreferrer"
                             className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground inline-flex">
