@@ -95,24 +95,44 @@ def create_document(payload: dict) -> str:
         return r.json()["id"]
 
 
-def wait_for_ready(doc_id: str, timeout: int = 30) -> None:
-    """Poll until document leaves the 'uploaded' state (async processing)."""
+def _get_status(client: httpx.Client, doc_id: str) -> str:
+    r = client.get(
+        f"https://api.pandadoc.com/public/v1/documents/{doc_id}",
+        headers={"Authorization": f"API-Key {config.PANDADOC_API_KEY}"},
+    )
+    if not r.is_success:
+        raise ValueError(f"PandaDoc status {r.status_code}: {r.text}")
+    return r.json().get("status", "")
+
+
+def wait_for_draft(doc_id: str, timeout: int = 30) -> None:
+    """Poll until document transitions out of 'uploaded' into 'draft'."""
     if not config.PANDADOC_API_KEY:
         raise ValueError("PANDADOC_API_KEY is not configured")
     deadline = time.time() + timeout
     with httpx.Client(timeout=10) as client:
         while time.time() < deadline:
-            r = client.get(
-                f"https://api.pandadoc.com/public/v1/documents/{doc_id}",
-                headers={"Authorization": f"API-Key {config.PANDADOC_API_KEY}"},
-            )
-            if not r.is_success:
-                raise ValueError(f"PandaDoc status {r.status_code}: {r.text}")
-            status = r.json().get("status", "")
-            if status != "document.uploaded":
+            if _get_status(client, doc_id) != "document.uploaded":
                 return
             time.sleep(2)
-    raise TimeoutError(f"Document {doc_id} still processing after {timeout}s")
+    raise TimeoutError(f"Document {doc_id} still uploading after {timeout}s")
+
+
+def send_document(doc_id: str) -> None:
+    """Send the document for signing (transitions draft → sent)."""
+    if not config.PANDADOC_API_KEY:
+        raise ValueError("PANDADOC_API_KEY is not configured")
+    with httpx.Client(timeout=30) as client:
+        r = client.post(
+            f"https://api.pandadoc.com/public/v1/documents/{doc_id}/send",
+            headers={
+                "Authorization": f"API-Key {config.PANDADOC_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={"silent": True, "subject": "Your proposal is ready"},
+        )
+        if not r.is_success:
+            raise ValueError(f"PandaDoc send {r.status_code}: {r.text}")
 
 
 def create_session(doc_id: str, recipient_email: str) -> str:

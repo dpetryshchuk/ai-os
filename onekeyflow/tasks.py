@@ -64,7 +64,8 @@ def generate_proposal(self, req_data: dict) -> dict:
         proposal = _call_llm(prompts, req_data)
         payload = pandadoc.build_payload(req_data, proposal)
         doc_id = pandadoc.create_document(payload)
-        pandadoc.wait_for_ready(doc_id)
+        pandadoc.wait_for_draft(doc_id)
+        pandadoc.send_document(doc_id)
         session_url = pandadoc.create_session(doc_id, req_data.get("email", ""))
         result = {
             "client": {
