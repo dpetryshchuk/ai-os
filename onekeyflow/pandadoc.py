@@ -3,7 +3,7 @@ import httpx
 import config
 
 PANDADOC_TEMPLATE_UUID = "RrDD8yBMNu6hSCzqxUQ5i3"
-PANDADOC_FOLDER_UUID = "/vfHANiBferJbQZKdke9MbF"
+PANDADOC_FOLDER_UUID = "vfHANiBferJbQZKdke9MbF"
 
 
 def build_payload(req: dict, proposal: dict) -> dict:
@@ -37,6 +37,14 @@ def build_payload(req: dict, proposal: dict) -> dict:
         "name": proposal.get("title", f"Proposal for {req.get('company', '')}"),
         "template_uuid": PANDADOC_TEMPLATE_UUID,
         "folder_uuid": PANDADOC_FOLDER_UUID,
+        "recipients": [
+            {
+                "email": req.get("email", ""),
+                "first_name": req.get("firstName", ""),
+                "last_name": req.get("lastName", ""),
+                "role": "Signer",
+            }
+        ],
         "tokens": tokens,
         "pricing_tables": [
             {
