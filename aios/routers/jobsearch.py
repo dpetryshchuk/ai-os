@@ -18,6 +18,7 @@ from schemas import (
     ContentPostRow,
     ContentResponse,
     EventsResponse,
+    FunnelStage,
     LeadsResponse,
     LeadRow,
     NoteCreate,
@@ -29,6 +30,7 @@ from schemas import (
     OsEventRow,
     PipelineResponse,
     ContactRow,
+    RetroFunnel,
     RetroResponse,
     WeeklyCount,
     DailyCount,
@@ -90,7 +92,7 @@ async def get_pipeline(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> P
 
 @router.get("/retro")
 async def get_retro(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> RetroResponse:
-    weekly, daily, by_source, needs_action, stats = await asyncio.gather(
+    weekly, daily, by_source, needs_action, stats, funnel_rows, velocity = await asyncio.gather(
         pool.fetch("""
             SELECT date_trunc('week', date) AS week, COUNT(*) AS count
             FROM interactions WHERE date >= now() - interval '12 weeks'
@@ -126,13 +128,61 @@ async def get_retro(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> Retr
             LEFT JOIN interactions i ON i.contact_id = c.id
             LEFT JOIN job_postings jp ON jp.status = 'applied'
         """),
+        pool.fetchrow("""
+            SELECT
+              COUNT(*) FILTER (WHERE stage IN ('Outreached','Responded','Ongoing','Dead')) AS outreached,
+              COUNT(*) FILTER (WHERE stage IN ('Responded','Ongoing'))                    AS responded,
+              COUNT(*) FILTER (WHERE stage = 'Ongoing')                                  AS ongoing
+            FROM contacts
+        """),
+        pool.fetchrow("""
+            SELECT AVG(EXTRACT(EPOCH FROM (resp.date - out.date)) / 86400.0) AS avg_days
+            FROM (
+              SELECT contact_id, MIN(date) AS date FROM interactions GROUP BY contact_id
+            ) out
+            JOIN (
+              SELECT i.contact_id, MIN(i.date) AS date
+              FROM interactions i
+              JOIN contacts c ON c.id = i.contact_id
+              WHERE c.stage IN ('Responded','Ongoing')
+              GROUP BY i.contact_id
+            ) resp ON resp.contact_id = out.contact_id
+            WHERE resp.date > out.date
+        """),
     )
+
+    today_count = sum(r["count"] for r in daily if str(r["date"]) == str(__import__("datetime").date.today()))
+    from datetime import date as _date
+    week_start = _date.today()
+    dow = week_start.weekday()
+    import datetime as _dt
+    week_start = week_start - _dt.timedelta(days=dow)
+    week_count = sum(r["count"] for r in daily if r["date"] >= week_start)
+
+    outreached = funnel_rows["outreached"] or 0
+    responded = funnel_rows["responded"] or 0
+    ongoing = funnel_rows["ongoing"] or 0
+    funnel_stages = [
+        FunnelStage(stage="Outreached", count=outreached, pct_of_prev=None),
+        FunnelStage(stage="Responded", count=responded,
+                    pct_of_prev=round(responded / outreached * 100, 1) if outreached else None),
+        FunnelStage(stage="In conversation", count=ongoing,
+                    pct_of_prev=round(ongoing / responded * 100, 1) if responded else None),
+    ]
+    avg_days = float(velocity["avg_days"]) if velocity and velocity["avg_days"] else None
+
     return RetroResponse(
         weekly=[WeeklyCount.model_validate(dict(r)) for r in weekly],
         daily=[DailyCount.model_validate(dict(r)) for r in daily],
         by_source=[SourceStat.model_validate(dict(r)) for r in by_source],
         needs_action=[NeedsActionContact.model_validate(dict(r)) for r in needs_action],
         stats=RetroStats.model_validate(dict(stats)) if stats else RetroStats(),
+        funnel=RetroFunnel(
+            stages=funnel_stages,
+            avg_days_to_response=avg_days,
+            interactions_this_week=week_count,
+            interactions_today=today_count,
+        ),
     )
 
 
@@ -141,11 +191,13 @@ async def get_retro(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> Retr
 @router.get("/leads")
 async def get_leads(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> LeadsResponse:
     rows = await pool.fetch("""
-        SELECT jp.id, jp.title, jp.link, jp.source, jp.status, co.name AS company_name, co.website
+        SELECT jp.id, jp.title, jp.link, jp.source, jp.status,
+               jp.location, jp.scraped_at,
+               co.name AS company_name, co.website
         FROM job_postings jp
         LEFT JOIN companies co ON co.id = jp.company_id
         WHERE jp.status = 'new'
-        ORDER BY jp.id DESC
+        ORDER BY jp.scraped_at DESC NULLS LAST, jp.id DESC
     """)
     return LeadsResponse(leads=[LeadRow.model_validate(dict(r)) for r in rows])
 
@@ -258,7 +310,7 @@ async def get_os_events(
 
 @router.post("/trigger/{task_type}")
 async def trigger_task(task_type: str, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> TriggerResponse:
-    allowed = {"scrape.yc", "scrape.hn", "scrape.remoteok", "scrape.simplify", "health.check"}
+    allowed = {"scrape.sd", "scrape.yc", "scrape.hn", "health.check"}
     if task_type not in allowed:
         raise HTTPException(400, f"Unknown task type: {task_type}")
     import events as ev

@@ -64,6 +64,8 @@ class LeadRow(BaseModel):
     status: str
     company_name: str | None = None
     website: str | None = None
+    location: str | None = None
+    scraped_at: datetime | None = None
 
 
 class ApplicationRow(BaseModel):
@@ -128,6 +130,19 @@ class RetroStats(BaseModel):
     total_applications: int = 0
 
 
+class FunnelStage(BaseModel):
+    stage: str
+    count: int
+    pct_of_prev: float | None = None
+
+
+class RetroFunnel(BaseModel):
+    stages: list[FunnelStage]
+    avg_days_to_response: float | None = None
+    interactions_this_week: int = 0
+    interactions_today: int = 0
+
+
 # ─── Jobsearch — responses ────────────────────────────────────────────────────
 
 
@@ -141,6 +156,7 @@ class RetroResponse(OkResponse):
     by_source: list[SourceStat]
     needs_action: list[NeedsActionContact]
     stats: RetroStats
+    funnel: RetroFunnel | None = None
 
 
 class LeadsResponse(OkResponse):

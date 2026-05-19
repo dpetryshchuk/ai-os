@@ -17,17 +17,15 @@ celery_app.conf.timezone = "UTC"
 
 def _import_handlers() -> dict[str, Callable]:
     from workers.health import run as health_run
+    from workers.scrapers.jobspy_scraper import run as sd_run
     from workers.scrapers.yc import run as yc_run
     from workers.scrapers.hn import run as hn_run
-    from workers.scrapers.remoteok import run as remoteok_run
-    from workers.scrapers.simplify import run as simplify_run
 
     return {
         "health.check": health_run,
+        "scrape.sd": sd_run,
         "scrape.yc": yc_run,
         "scrape.hn": hn_run,
-        "scrape.remoteok": remoteok_run,
-        "scrape.simplify": simplify_run,
     }
 
 
@@ -81,25 +79,25 @@ def run_scheduled(event_type: str) -> None:
 # ── Beat schedule ─────────────────────────────────────────────────────────────
 
 celery_app.conf.beat_schedule = {
-    "scrape-yc-8am": {
+    "scrape-sd-morning": {
         "task": "events.run_scheduled",
         "schedule": crontab(hour=8, minute=0),
+        "args": ["scrape.sd"],
+    },
+    "scrape-sd-evening": {
+        "task": "events.run_scheduled",
+        "schedule": crontab(hour=20, minute=0),
+        "args": ["scrape.sd"],
+    },
+    "scrape-yc-8am": {
+        "task": "events.run_scheduled",
+        "schedule": crontab(hour=8, minute=10),
         "args": ["scrape.yc"],
     },
     "scrape-hn-8am": {
         "task": "events.run_scheduled",
-        "schedule": crontab(hour=8, minute=5),
+        "schedule": crontab(hour=8, minute=15),
         "args": ["scrape.hn"],
-    },
-    "scrape-remoteok-2pm": {
-        "task": "events.run_scheduled",
-        "schedule": crontab(hour=14, minute=0),
-        "args": ["scrape.remoteok"],
-    },
-    "scrape-simplify-2pm": {
-        "task": "events.run_scheduled",
-        "schedule": crontab(hour=14, minute=5),
-        "args": ["scrape.simplify"],
     },
     "health-check-60s": {
         "task": "events.run_scheduled",
