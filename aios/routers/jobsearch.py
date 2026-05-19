@@ -136,7 +136,7 @@ async def get_retro(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> Retr
             FROM contacts
         """),
         pool.fetchrow("""
-            SELECT AVG(EXTRACT(EPOCH FROM (resp.date - out.date)) / 86400.0) AS avg_days
+            SELECT AVG((resp.date - out.date)::float) AS avg_days
             FROM (
               SELECT contact_id, MIN(date) AS date FROM interactions GROUP BY contact_id
             ) out
