@@ -40,7 +40,7 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
       DATA_DIR: /app/data
     volumes:
-      - onekeyflow_data:/app/data
+      - ./onekeyflow/okf.db:/app/data/okf.db
     networks:
       - internal
     restart: unless-stopped
@@ -106,4 +106,3 @@ networks:
 volumes:
   postgres_data:
   jobsearch_uploads:
-  onekeyflow_data:
