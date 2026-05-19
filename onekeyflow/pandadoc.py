@@ -93,7 +93,7 @@ def create_document(payload: dict) -> str:
         return r.json()["id"]
 
 
-def create_session(doc_id: str) -> str:
+def create_session(doc_id: str, recipient_email: str) -> str:
     """Sync POST to create a PandaDoc viewer session. Returns no-login viewer URL."""
     if not config.PANDADOC_API_KEY:
         raise ValueError("PANDADOC_API_KEY is not configured")
@@ -104,8 +104,9 @@ def create_session(doc_id: str) -> str:
                 "Authorization": f"API-Key {config.PANDADOC_API_KEY}",
                 "Content-Type": "application/json",
             },
-            json={"lifetime": 900, "recipient": "viewer"},
+            json={"lifetime": 900, "recipient": recipient_email},
         )
-        r.raise_for_status()
+        if not r.is_success:
+            raise ValueError(f"PandaDoc session {r.status_code}: {r.text}")
         session_id = r.json()["id"]
         return f"https://app.pandadoc.com/s/{session_id}"
