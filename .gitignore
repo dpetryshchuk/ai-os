@@ -24,6 +24,11 @@ apps/jobsearch-vps/morning-outputs/
 apps/*/public/
 apps/*/frontend/dist/
 
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
 # visual brainstorming
 .superpowers/
 
