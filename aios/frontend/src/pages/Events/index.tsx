@@ -16,10 +16,9 @@ type OsEvent = {
 }
 
 const TRIGGERS = [
+  { label: 'Scrape SD', type: 'scrape.sd' },
   { label: 'YC', type: 'scrape.yc' },
   { label: 'HN', type: 'scrape.hn' },
-  { label: 'RemoteOK', type: 'scrape.remoteok' },
-  { label: 'Simplify', type: 'scrape.simplify' },
   { label: 'Health', type: 'health.check' },
 ]
 
