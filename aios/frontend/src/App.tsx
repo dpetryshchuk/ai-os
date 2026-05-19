@@ -8,6 +8,7 @@ import Leads from './pages/JobSearch/Leads'
 import Applications from './pages/JobSearch/Applications'
 import Notes from './pages/JobSearch/Notes'
 import Retro from './pages/JobSearch/Retro'
+import JobSearchLayout from './pages/JobSearch/JobSearchLayout'
 import Essays from './pages/Writing/Essays'
 import Freewrite from './pages/Writing/Freewrite'
 import DailyLog from './pages/DailyLog'
@@ -22,7 +23,7 @@ export default function App() {
           <Route index element={<Home />} />
           <Route path="events" element={<EventsPage />} />
           <Route path="ideas" element={<Ideas />} />
-          <Route path="jobsearch">
+          <Route path="jobsearch" element={<JobSearchLayout />}>
             <Route index element={<Navigate to="chat" replace />} />
             <Route path="chat" element={<Chat />} />
             <Route path="pipeline" element={<Pipeline />} />

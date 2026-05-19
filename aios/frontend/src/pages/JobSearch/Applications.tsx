@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAgentRefresh } from '@/hooks/useAgentRefresh'
 import { ExternalLink, Upload } from 'lucide-react'
 
 interface Application {
@@ -61,13 +62,17 @@ export default function Applications() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true)
     fetch('/api/jobsearch/applications')
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then(d => setApps(d.applications ?? []))
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => { load() }, [load])
+  useAgentRefresh(load)
 
   const updateResume = (id: string, path: string) => {
     setApps(prev => prev.map(a => a.id === id ? { ...a, resume_path: path } : a))

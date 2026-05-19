@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { TrendingUp, Clock, Zap, AlertCircle } from 'lucide-react'
+import { useAgentRefresh } from '@/hooks/useAgentRefresh'
 
 interface FunnelStage {
   stage: string
@@ -134,13 +135,17 @@ export default function Retro() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true)
     fetch('/api/jobsearch/retro')
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => { load() }, [load])
+  useAgentRefresh(load)
 
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading…</div>
   if (error) return <div className="p-6 text-sm text-destructive">Error: {error}</div>
