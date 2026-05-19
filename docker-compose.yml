@@ -38,6 +38,9 @@ services:
     environment:
       PORT: "4117"
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      DATA_DIR: /app/data
+    volumes:
+      - onekeyflow_data:/app/data
     networks:
       - internal
     restart: unless-stopped
@@ -103,3 +106,4 @@ networks:
 volumes:
   postgres_data:
   jobsearch_uploads:
+  onekeyflow_data:

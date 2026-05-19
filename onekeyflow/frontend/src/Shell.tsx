@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { ClipboardList, Menu, Megaphone, X } from 'lucide-react'
+import { ClipboardList, Menu, Megaphone, TrendingUp, X } from 'lucide-react'
 import { cn } from './lib/utils'
 
 type NavSection = {
@@ -13,6 +13,7 @@ type NavSection = {
 const NAV: NavSection[] = [
   { label: 'Proposals', path: '/proposals', icon: ClipboardList },
   { label: 'Outreach', path: '/outreach', icon: Megaphone },
+  { label: 'Revenue', path: '/revenue', icon: TrendingUp },
 ]
 
 function NavItem({ item, onNavigate }: { item: NavSection; onNavigate: () => void }) {
