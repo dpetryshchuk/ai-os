@@ -80,7 +80,8 @@ def create_document(payload: dict) -> str:
             },
             json=payload,
         )
-        r.raise_for_status()
+        if not r.is_success:
+            raise ValueError(f"PandaDoc {r.status_code}: {r.text}")
         return r.json()["id"]
 
 
