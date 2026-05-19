@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowLeft, Copy, Check, Loader2 } from 'lucide-react'
+import { ArrowLeft, Copy, Check, Loader2, ExternalLink } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 
@@ -97,9 +97,10 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
-function ProposalPreview({ client, proposal, onBack }: {
+function ProposalPreview({ client, proposal, pandadoc, onBack }: {
   client: ClientData
   proposal: ProposalData
+  pandadoc: { id: string; url: string } | null
   onBack: () => void
 }) {
   const price = parseFloat(client.price.replace(/[^0-9.]/g, '')) || 0
@@ -144,7 +145,20 @@ function ProposalPreview({ client, proposal, onBack }: {
           <ArrowLeft size={16} />
           Back to form
         </button>
-        <CopyButton text={fullText} />
+        <div className="flex items-center gap-4">
+          {pandadoc && (
+            <a
+              href={pandadoc.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-xs font-medium text-foreground hover:text-foreground/70 transition-colors"
+            >
+              <ExternalLink size={12} />
+              Open in PandaDoc
+            </a>
+          )}
+          <CopyButton text={fullText} />
+        </div>
       </div>
 
       {/* Cover */}
@@ -273,7 +287,7 @@ export default function Proposals() {
   const [form, setForm] = useState<FormValues>(EMPTY)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<{ client: ClientData; proposal: ProposalData } | null>(null)
+  const [result, setResult] = useState<{ client: ClientData; proposal: ProposalData; pandadoc: { id: string; url: string } | null } | null>(null)
 
   const set = (name: keyof FormValues, value: string) =>
     setForm(f => ({ ...f, [name]: value }))
@@ -283,14 +297,27 @@ export default function Proposals() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/proposals/generate', {
+      const enqueueRes = await fetch('/api/proposals/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       })
-      const data = await res.json()
-      if (!data.ok) throw new Error(data.error ?? 'Generation failed')
-      setResult({ client: data.client, proposal: data.proposal })
+      const enqueueData = await enqueueRes.json()
+      if (!enqueueData.ok) throw new Error(enqueueData.error ?? 'Failed to start generation')
+
+      const jobId = enqueueData.job_id
+      for (;;) {
+        await new Promise<void>((r) => setTimeout(r, 2000))
+        const statusRes = await fetch(`/api/proposals/status/${jobId}`)
+        const status = await statusRes.json()
+        if (status.status === 'done') {
+          setResult({ client: status.client, proposal: status.proposal, pandadoc: status.pandadoc ?? null })
+          break
+        }
+        if (status.status === 'failed') {
+          throw new Error(status.error ?? 'Generation failed')
+        }
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -303,6 +330,7 @@ export default function Proposals() {
       <ProposalPreview
         client={result.client}
         proposal={result.proposal}
+        pandadoc={result.pandadoc}
         onBack={() => setResult(null)}
       />
     )
