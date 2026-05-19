@@ -1,29 +1,166 @@
 import json
+import os
+import sqlite3
 from pathlib import Path
 
 import litellm
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+# ---------------------------------------------------------------------------
+# DB
+# ---------------------------------------------------------------------------
+
+_DB = Path(os.getenv("DATA_DIR", ".")) / "okf.db"
+
+_SEED = [
+    ("Feb 2026", 742.48,  74.248, 362.413, 234.75, 0.28, "BatsCRM $60 · Pearl West $682.48"),
+    ("Mar 2026", 2000.00, 200.00, 527.813, 298.45, 0.28, "Irby Report Tool $1,500"),
+    ("Apr 2026", 500.00,  50.00,  175.813,   0.00, 0.28, "Jeff Morning Prep Doc $500"),
+    ("May 2026", 1000.00, 30.00,  179.813,   0.00, 0.28, "Irby Serial Number Tool $1,000 (50% upfront)"),
+]
+
+
+def _connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(_DB)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _init_db() -> None:
+    _DB.parent.mkdir(parents=True, exist_ok=True)
+    conn = _connect()
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS monthly_pl (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            month            TEXT    NOT NULL UNIQUE,
+            gross_revenue    REAL    NOT NULL DEFAULT 0,
+            service_fees     REAL    NOT NULL DEFAULT 0,
+            fixed_overhead   REAL    NOT NULL DEFAULT 0,
+            variable_overhead REAL   NOT NULL DEFAULT 0,
+            tax_rate         REAL    NOT NULL DEFAULT 0.28,
+            notes            TEXT    NOT NULL DEFAULT ''
+        )
+    """)
+    conn.commit()
+    if conn.execute("SELECT COUNT(*) FROM monthly_pl").fetchone()[0] == 0:
+        conn.executemany(
+            "INSERT INTO monthly_pl (month, gross_revenue, service_fees, fixed_overhead, variable_overhead, tax_rate, notes) VALUES (?,?,?,?,?,?,?)",
+            _SEED,
+        )
+        conn.commit()
+    conn.close()
+
+
+def _enrich(row: sqlite3.Row) -> dict:
+    d = dict(row)
+    net_revenue        = d["gross_revenue"] - d["service_fees"]
+    total_overhead     = d["fixed_overhead"] + d["variable_overhead"]
+    operating_profit   = net_revenue - total_overhead
+    tax_provision      = max(0.0, operating_profit) * d["tax_rate"]
+    net_profit         = operating_profit - tax_provision
+    net_margin         = net_profit / net_revenue if net_revenue else 0.0
+    d.update(
+        net_revenue=round(net_revenue, 2),
+        total_overhead=round(total_overhead, 2),
+        operating_profit=round(operating_profit, 2),
+        tax_provision=round(tax_provision, 2),
+        net_profit=round(net_profit, 2),
+        net_margin=round(net_margin, 4),
+    )
+    return d
+
+
+# ---------------------------------------------------------------------------
+# App
+# ---------------------------------------------------------------------------
 
 app = FastAPI()
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
 )
 
+_init_db()
+
 
 @app.exception_handler(Exception)
 async def _exc(request: Request, exc: Exception):
-    from fastapi import HTTPException
     if isinstance(exc, HTTPException):
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={"ok": False, "error": exc.detail},
-        )
+        return JSONResponse(status_code=exc.status_code, content={"ok": False, "error": exc.detail})
     return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
 
+
+# ---------------------------------------------------------------------------
+# Revenue
+# ---------------------------------------------------------------------------
+
+class MonthEntry(BaseModel):
+    month: str
+    gross_revenue: float
+    service_fees: float = 0.0
+    fixed_overhead: float = 0.0
+    variable_overhead: float = 0.0
+    tax_rate: float = 0.28
+    notes: str = ""
+
+
+@app.get("/api/revenue")
+def get_revenue():
+    conn = _connect()
+    rows = conn.execute("SELECT * FROM monthly_pl ORDER BY id").fetchall()
+    conn.close()
+    return {"ok": True, "months": [_enrich(r) for r in rows]}
+
+
+@app.post("/api/revenue")
+def create_month(body: MonthEntry):
+    conn = _connect()
+    try:
+        cur = conn.execute(
+            "INSERT INTO monthly_pl (month, gross_revenue, service_fees, fixed_overhead, variable_overhead, tax_rate, notes) VALUES (?,?,?,?,?,?,?)",
+            (body.month, body.gross_revenue, body.service_fees, body.fixed_overhead, body.variable_overhead, body.tax_rate, body.notes),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM monthly_pl WHERE id=?", (cur.lastrowid,)).fetchone()
+        return {"ok": True, "month": _enrich(row)}
+    except sqlite3.IntegrityError:
+        raise HTTPException(400, f"Month '{body.month}' already exists")
+    finally:
+        conn.close()
+
+
+@app.put("/api/revenue/{month_id}")
+def update_month(month_id: int, body: MonthEntry):
+    conn = _connect()
+    try:
+        conn.execute(
+            "UPDATE monthly_pl SET month=?, gross_revenue=?, service_fees=?, fixed_overhead=?, variable_overhead=?, tax_rate=?, notes=? WHERE id=?",
+            (body.month, body.gross_revenue, body.service_fees, body.fixed_overhead, body.variable_overhead, body.tax_rate, body.notes, month_id),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM monthly_pl WHERE id=?", (month_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "Not found")
+        return {"ok": True, "month": _enrich(row)}
+    finally:
+        conn.close()
+
+
+@app.delete("/api/revenue/{month_id}")
+def delete_month(month_id: int):
+    conn = _connect()
+    conn.execute("DELETE FROM monthly_pl WHERE id=?", (month_id,))
+    conn.commit()
+    conn.close()
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Proposals
+# ---------------------------------------------------------------------------
 
 _INSTRUCTION = """We're an operations agency that builds outreach systems, CRM systems, project management systems, no-code systems, and integrations.
 
@@ -134,16 +271,13 @@ async def generate_proposal(req: ProposalRequest):
             }),
         },
     ]
-
     response = await litellm.acompletion(
         model="deepseek/deepseek-chat",
         messages=messages,
         response_format={"type": "json_object"},
         temperature=1,
     )
-
     proposal = json.loads(response.choices[0].message.content)
-
     return {
         "ok": True,
         "client": {
@@ -157,8 +291,12 @@ async def generate_proposal(req: ProposalRequest):
     }
 
 
+# ---------------------------------------------------------------------------
+# Health + SPA
+# ---------------------------------------------------------------------------
+
 @app.get("/api/health")
-async def health():
+def health():
     return {"ok": True, "status": "healthy"}
 
 
