@@ -65,8 +65,7 @@ def generate_proposal(self, req_data: dict) -> dict:
         payload = pandadoc.build_payload(req_data, proposal)
         doc_id = pandadoc.create_document(payload)
         pandadoc.wait_for_draft(doc_id)
-        pandadoc.send_document(doc_id)
-        session_url = pandadoc.create_session(doc_id, req_data.get("email", ""))
+        doc_url = f"https://app.pandadoc.com/a/#/documents/{doc_id}"
         result = {
             "client": {
                 "firstName": req_data.get("firstName", ""),
@@ -76,7 +75,7 @@ def generate_proposal(self, req_data: dict) -> dict:
                 "price":     req_data.get("price", ""),
             },
             "proposal": proposal,
-            "pandadoc": {"id": doc_id, "url": session_url},
+            "pandadoc": {"id": doc_id, "url": doc_url},
         }
         db.complete_event(job_id, result)
         return result
