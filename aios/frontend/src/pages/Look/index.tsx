@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import Cropper from 'react-easy-crop'
+import type { Area } from 'react-easy-crop'
 import { cn } from '@/lib/utils'
-import { Plus, X, Mic, Image, Video, Trash2 } from 'lucide-react'
+import { Plus, X, Mic, Image, Video, Trash2, Crop } from 'lucide-react'
 
 const PRESET_CATEGORIES = ['copy', 'packaging', 'typography', 'color', 'layout', 'product', 'shape']
 
@@ -31,6 +33,128 @@ interface LookItem {
   created_at: string | null
 }
 
+// ── Canvas crop helper ────────────────────────────────────────────────────────
+
+function createImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image()
+    img.addEventListener('load', () => resolve(img))
+    img.addEventListener('error', reject)
+    img.setAttribute('crossOrigin', 'anonymous')
+    img.src = url
+  })
+}
+
+async function cropToBlob(imageSrc: string, px: Area): Promise<Blob> {
+  const image = await createImage(imageSrc)
+  const canvas = document.createElement('canvas')
+  canvas.width = px.width
+  canvas.height = px.height
+  const ctx = canvas.getContext('2d')!
+  ctx.drawImage(image, px.x, px.y, px.width, px.height, 0, 0, px.width, px.height)
+  return new Promise(resolve => canvas.toBlob(b => resolve(b!), 'image/jpeg', 0.92))
+}
+
+// ── Crop modal ────────────────────────────────────────────────────────────────
+
+function CropModal({
+  src,
+  onApply,
+  onSkip,
+}: {
+  src: string
+  onApply: (blob: Blob) => void
+  onSkip: () => void
+}) {
+  const [crop, setCrop] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [aspect, setAspect] = useState<number | undefined>(undefined)
+  const [croppedPx, setCroppedPx] = useState<Area | null>(null)
+  const [applying, setApplying] = useState(false)
+
+  const onCropComplete = useCallback((_: Area, px: Area) => setCroppedPx(px), [])
+
+  async function handleApply() {
+    if (!croppedPx) return
+    setApplying(true)
+    const blob = await cropToBlob(src, croppedPx)
+    onApply(blob)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black flex flex-col">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-4 py-3 shrink-0">
+        <button onClick={onSkip} className="text-white/60 hover:text-white text-sm">Skip</button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setAspect(undefined)}
+            className={cn('px-3 py-1 rounded-full text-xs border transition-colors',
+              aspect === undefined ? 'bg-white text-black border-white' : 'border-white/30 text-white/60 hover:border-white/60'
+            )}
+          >Free</button>
+          <button
+            onClick={() => setAspect(1)}
+            className={cn('px-3 py-1 rounded-full text-xs border transition-colors',
+              aspect === 1 ? 'bg-white text-black border-white' : 'border-white/30 text-white/60 hover:border-white/60'
+            )}
+          >1:1</button>
+          <button
+            onClick={() => setAspect(4 / 5)}
+            className={cn('px-3 py-1 rounded-full text-xs border transition-colors',
+              aspect === 4 / 5 ? 'bg-white text-black border-white' : 'border-white/30 text-white/60 hover:border-white/60'
+            )}
+          >4:5</button>
+          <button
+            onClick={() => setAspect(16 / 9)}
+            className={cn('px-3 py-1 rounded-full text-xs border transition-colors',
+              aspect === 16 / 9 ? 'bg-white text-black border-white' : 'border-white/30 text-white/60 hover:border-white/60'
+            )}
+          >16:9</button>
+        </div>
+        <button
+          onClick={handleApply}
+          disabled={applying}
+          className="text-sm font-semibold text-white disabled:opacity-40"
+        >
+          {applying ? 'Cropping…' : 'Apply'}
+        </button>
+      </div>
+
+      {/* Cropper */}
+      <div className="relative flex-1">
+        <Cropper
+          image={src}
+          crop={crop}
+          zoom={zoom}
+          aspect={aspect}
+          onCropChange={setCrop}
+          onZoomChange={setZoom}
+          onCropComplete={onCropComplete}
+          style={{ containerStyle: { background: '#000' } }}
+        />
+      </div>
+
+      {/* Zoom slider */}
+      <div className="px-6 py-4 shrink-0 flex items-center gap-3">
+        <span className="text-white/40 text-xs">−</span>
+        <input
+          type="range"
+          min={1}
+          max={3}
+          step={0.01}
+          value={zoom}
+          onChange={e => setZoom(Number(e.target.value))}
+          className="flex-1 accent-white"
+        />
+        <span className="text-white/40 text-xs">+</span>
+      </div>
+    </div>
+  )
+}
+
+// ── Media thumb ───────────────────────────────────────────────────────────────
+
 function MediaThumb({ item, onClick }: { item: LookItem; onClick: () => void }) {
   const src = `/api/look/items/${item.id}/file`
   return (
@@ -41,18 +165,17 @@ function MediaThumb({ item, onClick }: { item: LookItem; onClick: () => void }) 
       {item.media_type === 'image' ? (
         <img src={src} alt={item.note ?? item.category} className="w-full object-cover" loading="lazy" />
       ) : item.media_type === 'video' ? (
-        <div className="relative aspect-video bg-black flex items-center justify-center">
+        <div className="relative aspect-video bg-black">
           <video src={src} className="w-full h-full object-cover" preload="metadata" />
           <div className="absolute inset-0 flex items-center justify-center bg-black/30">
             <Video className="size-7 text-white/80" />
           </div>
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center gap-2 py-8 px-4 bg-muted/50">
+        <div className="flex items-center justify-center py-8 bg-muted/50">
           <Mic className="size-8 text-muted-foreground" />
         </div>
       )}
-      {/* Voice note badge when photo also has audio */}
       {item.voice_path && item.media_type !== 'voice' && (
         <div className="absolute top-2 left-2 bg-black/60 rounded-full p-1">
           <Mic className="size-3 text-white" />
@@ -67,6 +190,8 @@ function MediaThumb({ item, onClick }: { item: LookItem; onClick: () => void }) 
     </div>
   )
 }
+
+// ── Item detail ───────────────────────────────────────────────────────────────
 
 function ItemDetail({ item, onClose, onDelete }: { item: LookItem; onClose: () => void; onDelete: () => void }) {
   const src = `/api/look/items/${item.id}/file`
@@ -105,10 +230,8 @@ function ItemDetail({ item, onClose, onDelete }: { item: LookItem; onClose: () =
             <audio src={src} controls autoPlay />
           </div>
         )}
-
-        {/* Attached voice note */}
         {item.voice_path && (
-          <div className="w-full max-w-sm bg-white/10 rounded-xl p-3 flex items-center gap-3" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-sm bg-white/10 rounded-xl p-3 flex items-center gap-3">
             <Mic className="size-4 text-white/60 shrink-0" />
             <audio src={`/api/look/items/${item.id}/voice`} controls className="flex-1 h-8" />
           </div>
@@ -125,6 +248,8 @@ function ItemDetail({ item, onClose, onDelete }: { item: LookItem; onClose: () =
   )
 }
 
+// ── Upload sheet ──────────────────────────────────────────────────────────────
+
 function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded: (item: LookItem) => void }) {
   const [category, setCategory] = useState('copy')
   const [customCat, setCustomCat] = useState('')
@@ -132,6 +257,7 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
   const [source, setSource] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  const [cropSrc, setCropSrc] = useState<string | null>(null)
   const [voiceFile, setVoiceFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -140,13 +266,30 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
 
   const activeCategory = customCat.trim() || category
 
-  function handleFile(f: File) {
-    setFile(f)
-    if (f.type.startsWith('image/') || f.type.startsWith('video/')) {
-      setPreview(URL.createObjectURL(f))
+  function handleFileSelect(f: File) {
+    if (f.type.startsWith('image/')) {
+      // Open crop modal before finalising
+      const url = URL.createObjectURL(f)
+      setCropSrc(url)
+      // Store original to use as fallback on Skip
+      setFile(f)
     } else {
-      setPreview(null)
+      setFile(f)
+      if (f.type.startsWith('video/')) setPreview(URL.createObjectURL(f))
     }
+  }
+
+  function handleCropApply(blob: Blob) {
+    const cropped = new File([blob], 'cropped.jpg', { type: 'image/jpeg' })
+    setFile(cropped)
+    setPreview(URL.createObjectURL(blob))
+    setCropSrc(null)
+  }
+
+  function handleCropSkip() {
+    // Use original file as-is
+    if (file) setPreview(URL.createObjectURL(file))
+    setCropSrc(null)
   }
 
   async function handleSubmit() {
@@ -162,8 +305,7 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
       if (voiceFile) fd.append('voice_note', voiceFile)
       const res = await fetch('/api/look/items', { method: 'POST', body: fd })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      onUploaded(data.item)
+      onUploaded((await res.json()).item)
     } catch (e: any) {
       setError(e.message)
       setUploading(false)
@@ -173,6 +315,7 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
+
       <div className="fixed inset-x-0 bottom-0 z-50 bg-background border-t border-border rounded-t-2xl flex flex-col max-h-[92vh]">
         <div className="flex justify-center pt-3 pb-1 shrink-0">
           <div className="w-10 h-1 bg-border rounded-full" />
@@ -186,16 +329,16 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
 
         <div className="overflow-y-auto px-4 pb-8 flex flex-col gap-5">
 
-          {/* Primary media */}
+          {/* File picker / preview */}
           <div>
             <input
               ref={fileRef}
               type="file"
               accept="image/*,video/*,audio/*"
               className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f) }}
             />
-            {file ? (
+            {file && !cropSrc ? (
               <div className="relative rounded-lg overflow-hidden bg-muted border border-border">
                 {preview && file.type.startsWith('image/') && (
                   <img src={preview} alt="" className="w-full max-h-56 object-contain" />
@@ -209,14 +352,25 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
                     <span className="text-sm text-muted-foreground truncate">{file.name}</span>
                   </div>
                 )}
-                <button
-                  className="absolute top-2 right-2 bg-black/60 rounded-full p-1 text-white"
-                  onClick={() => { setFile(null); setPreview(null) }}
-                >
-                  <X className="size-3" />
-                </button>
+                <div className="absolute top-2 right-2 flex gap-1.5">
+                  {file.type.startsWith('image/') && (
+                    <button
+                      className="bg-black/60 rounded-full p-1.5 text-white hover:bg-black/80"
+                      onClick={() => { if (preview) setCropSrc(preview) }}
+                      title="Crop"
+                    >
+                      <Crop className="size-3" />
+                    </button>
+                  )}
+                  <button
+                    className="bg-black/60 rounded-full p-1 text-white hover:bg-black/80"
+                    onClick={() => { setFile(null); setPreview(null) }}
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
               </div>
-            ) : (
+            ) : !cropSrc ? (
               <button
                 onClick={() => fileRef.current?.click()}
                 className="w-full border-2 border-dashed border-border rounded-xl py-10 flex flex-col items-center gap-2 text-muted-foreground hover:border-foreground/30 hover:text-foreground transition-colors"
@@ -229,14 +383,14 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
                 <span className="text-sm">Photo, video, or voice note</span>
                 <span className="text-xs text-muted-foreground/50">Tap to open picker</span>
               </button>
-            )}
+            ) : null}
           </div>
 
-          {/* Attach voice note (only shown when primary is photo/video) */}
-          {file && !file.type.startsWith('audio/') && (
+          {/* Voice note (only for photo/video) */}
+          {file && !file.type.startsWith('audio/') && !cropSrc && (
             <div>
               <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1.5">
-                Voice note <span className="normal-case tracking-normal">(optional — attach audio to this photo)</span>
+                Voice note <span className="normal-case tracking-normal">(optional)</span>
               </p>
               <input
                 ref={voiceRef}
@@ -293,7 +447,7 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
             />
           </div>
 
-          {/* Source */}
+          {/* Where */}
           <div>
             <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1.5">
               Where? <span className="normal-case tracking-normal">(optional)</span>
@@ -325,16 +479,27 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
 
           <button
             onClick={handleSubmit}
-            disabled={uploading || !file}
+            disabled={uploading || !file || !!cropSrc}
             className="w-full bg-foreground text-background py-3 rounded-xl text-sm font-semibold disabled:opacity-40 active:scale-[.98] transition-transform"
           >
             {uploading ? 'Saving…' : 'Save'}
           </button>
         </div>
       </div>
+
+      {/* Crop modal — above everything */}
+      {cropSrc && (
+        <CropModal
+          src={cropSrc}
+          onApply={handleCropApply}
+          onSkip={handleCropSkip}
+        />
+      )}
     </>
   )
 }
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Look() {
   const [items, setItems] = useState<LookItem[]>([])
@@ -346,10 +511,7 @@ export default function Look() {
   useEffect(() => {
     const url = filter === 'all' ? '/api/look/items' : `/api/look/items?category=${encodeURIComponent(filter)}`
     setLoading(true)
-    fetch(url)
-      .then(r => r.json())
-      .then(d => setItems(d.items ?? []))
-      .finally(() => setLoading(false))
+    fetch(url).then(r => r.json()).then(d => setItems(d.items ?? [])).finally(() => setLoading(false))
   }, [filter])
 
   function handleUploaded(item: LookItem) {
@@ -366,7 +528,6 @@ export default function Look() {
   const cols2 = [items.filter((_, i) => i % 2 === 0), items.filter((_, i) => i % 2 === 1)]
   const cols3 = [items.filter((_, i) => i % 3 === 0), items.filter((_, i) => i % 3 === 1), items.filter((_, i) => i % 3 === 2)]
 
-  // Build filter pill list: presets that have items, plus any custom categories
   const usedCategories = Array.from(new Set(items.map(i => i.category)))
   const filterCats = [
     ...PRESET_CATEGORIES.filter(c => usedCategories.includes(c)),
