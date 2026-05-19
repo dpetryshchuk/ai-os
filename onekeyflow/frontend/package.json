@@ -1,5 +1,5 @@
 {
-  "name": "proposals-frontend",
+  "name": "onekeyflow-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -16,6 +16,7 @@
     "lucide-react": "^0.447.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-router-dom": "^7.0.0",
     "tailwind-merge": "^2.5.4",
     "tw-animate-css": "^1.0.0"
   },
