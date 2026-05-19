@@ -104,7 +104,7 @@ jobs:
             cd /home/dima/ai-os
             git fetch origin master && git reset --hard origin/master
             docker compose pull onekeyflow
-            docker compose up -d onekeyflow
+            docker compose up -d onekeyflow onekeyflow-worker
 
   deploy-infra:
     runs-on: ubuntu-latest
