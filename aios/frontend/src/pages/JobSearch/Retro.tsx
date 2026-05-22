@@ -59,7 +59,7 @@ function CalendarRow({ daily }: { daily: { date: string; count: number }[] }) {
   const DAY = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
   return (
-    <div className="flex gap-1.5">
+    <div suppressHydrationWarning className="flex gap-1.5">
       {days.map((d, i) => {
         const s = d.toISOString().slice(0, 10)
         const n = countMap[s] ?? 0
@@ -154,7 +154,7 @@ export default function Retro() {
   const { stats, weekly, daily, by_source, needs_action, funnel } = data
 
   return (
-    <div className="overflow-y-auto">
+    <div className="overflow-y-auto h-full">
       <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-7">
 
         {/* Activity */}
@@ -249,7 +249,7 @@ export default function Retro() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...by_source].sort((a, b) => b.total - a.total).map(s => {
+                  {by_source.toSorted((a, b) => b.total - a.total).map(s => {
                     const rate = s.total > 0 ? Math.round(s.active / s.total * 100) : null
                     return (
                       <tr key={s.source} className="border-b border-border/50 last:border-0 hover:bg-muted/20 transition-colors">

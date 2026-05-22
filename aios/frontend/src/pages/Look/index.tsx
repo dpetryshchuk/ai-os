@@ -69,20 +69,20 @@ function CropModal({
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [aspect, setAspect] = useState<number | undefined>(undefined)
-  const [croppedPx, setCroppedPx] = useState<Area | null>(null)
+  const croppedPxRef = useRef<Area | null>(null)
   const [applying, setApplying] = useState(false)
 
-  const onCropComplete = useCallback((_: Area, px: Area) => setCroppedPx(px), [])
+  const onCropComplete = useCallback((_: Area, px: Area) => { croppedPxRef.current = px }, [])
 
   async function handleApply() {
-    if (!croppedPx) return
+    if (!croppedPxRef.current) return
     setApplying(true)
-    const blob = await cropToBlob(src, croppedPx)
+    const blob = await cropToBlob(src, croppedPxRef.current)
     onApply(blob)
   }
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black flex flex-col">
+    <div className="fixed inset-0 z-[60] bg-gray-950 flex flex-col">
       {/* Top bar */}
       <div className="flex items-center justify-between px-4 py-3 shrink-0">
         <button onClick={onSkip} className="text-white/60 hover:text-white text-sm">Skip</button>
@@ -159,13 +159,16 @@ function MediaThumb({ item, onClick }: { item: LookItem; onClick: () => void }) 
   const src = `/api/look/items/${item.id}/file`
   return (
     <div
+      role="button"
+      tabIndex={0}
       className="relative group cursor-pointer rounded-lg overflow-hidden bg-muted border border-border"
       onClick={onClick}
+      onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onClick()}
     >
       {item.media_type === 'image' ? (
         <img src={src} alt={item.note ?? item.category} className="w-full object-cover" loading="lazy" />
       ) : item.media_type === 'video' ? (
-        <div className="relative aspect-video bg-black">
+        <div className="relative aspect-video bg-gray-950">
           <video src={src} className="w-full h-full object-cover" preload="metadata" />
           <div className="absolute inset-0 flex items-center justify-center bg-black/30">
             <Video className="size-7 text-white/80" />
@@ -204,8 +207,13 @@ function ItemDetail({ item, onClose, onDelete }: { item: LookItem; onClose: () =
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/90 flex flex-col" onClick={onClose}>
-      <div className="flex items-center justify-between px-4 py-3 shrink-0" onClick={e => e.stopPropagation()}>
+    <div
+      role="presentation"
+      className="fixed inset-0 z-50 bg-black/90 flex flex-col"
+      onClick={onClose}
+      onKeyDown={e => e.key === 'Escape' && onClose()}
+    >
+      <div role="presentation" className="flex items-center justify-between px-4 py-3 shrink-0" onClick={e => e.stopPropagation()}>
         <span className={cn('text-[10px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded border', catColor(item.category))}>
           {item.category}
         </span>
@@ -219,7 +227,7 @@ function ItemDetail({ item, onClose, onDelete }: { item: LookItem; onClose: () =
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-4 gap-4" onClick={e => e.stopPropagation()}>
+      <div role="presentation" className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-4 gap-4" onClick={e => e.stopPropagation()}>
         {item.media_type === 'image' ? (
           <img src={src} alt="" className="max-w-full max-h-[65vh] rounded-lg object-contain" />
         ) : item.media_type === 'video' ? (
@@ -239,7 +247,7 @@ function ItemDetail({ item, onClose, onDelete }: { item: LookItem; onClose: () =
       </div>
 
       {(item.note || item.source) && (
-        <div className="px-4 pb-6 text-center shrink-0" onClick={e => e.stopPropagation()}>
+        <div role="presentation" className="px-4 pb-6 text-center shrink-0" onClick={e => e.stopPropagation()}>
           {item.source && <p className="text-sm text-white/50 font-mono">{item.source}</p>}
           {item.note && <p className="text-sm text-white/80 mt-1">{item.note}</p>}
         </div>
@@ -314,7 +322,12 @@ function UploadSheet({ onClose, onUploaded }: { onClose: () => void; onUploaded:
 
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/50" onClick={onClose} />
+      <div
+        role="presentation"
+        className="fixed inset-0 z-40 bg-black/50"
+        onClick={onClose}
+        onKeyDown={e => e.key === 'Escape' && onClose()}
+      />
 
       <div className="fixed inset-x-0 bottom-0 z-50 bg-background border-t border-border rounded-t-2xl flex flex-col max-h-[92vh]">
         <div className="flex justify-center pt-3 pb-1 shrink-0">
@@ -564,7 +577,7 @@ export default function Look() {
       </div>
 
       {/* Masonry grid */}
-      <div className="flex-1 overflow-y-auto px-3 py-3">
+      <div className="flex-1 overflow-y-auto p-3">
         {loading ? (
           <p className="text-sm text-muted-foreground text-center py-10">Loading…</p>
         ) : items.length === 0 ? (

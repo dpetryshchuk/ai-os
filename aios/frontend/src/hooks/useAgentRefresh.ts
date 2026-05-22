@@ -1,8 +1,12 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 export function useAgentRefresh(callback: () => void) {
+  const callbackRef = useRef(callback)
+  callbackRef.current = callback
+
   useEffect(() => {
-    window.addEventListener('agent:mutation', callback)
-    return () => window.removeEventListener('agent:mutation', callback)
-  }, [callback])
+    const handler = () => callbackRef.current()
+    window.addEventListener('agent:mutation', handler)
+    return () => window.removeEventListener('agent:mutation', handler)
+  }, [])
 }

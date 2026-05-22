@@ -98,6 +98,11 @@ function ListPanel({
   const [newEssayTitle, setNewEssayTitle] = useState('')
   const [newFolderMode, setNewFolderMode] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
+  const newFolderInputRef = useRef<HTMLInputElement>(null)
+  const newEssayInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { if (newFolderMode) newFolderInputRef.current?.focus() }, [newFolderMode])
+  useEffect(() => { if (newEssayFolder) newEssayInputRef.current?.focus() }, [newEssayFolder])
 
   const toggle = (folder: string) =>
     setCollapsed(s => ({ ...s, [folder]: !s[folder] }))
@@ -154,7 +159,7 @@ function ListPanel({
       <div className="flex-1 overflow-y-auto py-1">
         {newFolderMode && (
           <input
-            autoFocus
+            ref={newFolderInputRef}
             value={newFolderName}
             onChange={e => setNewFolderName(e.target.value)}
             onKeyDown={e => {
@@ -255,7 +260,7 @@ function ListPanel({
                   {/* Inline new essay input */}
                   {newEssayFolder === folder && (
                     <input
-                      autoFocus
+                      ref={newEssayInputRef}
                       value={newEssayTitle}
                       onChange={e => setNewEssayTitle(e.target.value)}
                       onKeyDown={e => {
@@ -287,7 +292,7 @@ function ListPanel({
         />
         <button
           onClick={onPush}
-          className="w-full bg-foreground text-background rounded-md px-2 py-2 text-[11.5px] font-medium hover:opacity-90 transition-opacity"
+          className="w-full bg-foreground text-background rounded-md p-2 text-[11.5px] font-medium hover:opacity-90 transition-opacity"
         >
           ↑ Push to GitHub
         </button>

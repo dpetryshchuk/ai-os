@@ -190,7 +190,7 @@ function VideoRecorder({ entryId, onDone, onClose }: { entryId: string; onDone: 
   const elapsed$ = `${String(Math.floor(elapsed / 60)).padStart(2, '0')}:${String(elapsed % 60).padStart(2, '0')}`
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="fixed inset-0 z-50 bg-gray-950 flex flex-col">
       <video ref={videoRef} autoPlay playsInline muted className="flex-1 object-cover w-full" />
       {error ? (
         <div className="absolute inset-0 flex items-center justify-center bg-black/80 text-white text-center p-8">
@@ -225,7 +225,7 @@ function VideoPlayer({ entryId, onBack }: { entryId: string; onBack: () => void 
         <button onClick={onBack} className="text-sm text-muted-foreground hover:text-foreground mb-6 transition-colors flex items-center gap-1">
           <ArrowLeft size={14} /> back to writing
         </button>
-        <video src={api.videoUrl(entryId)} controls className="w-full rounded-lg bg-black" />
+        <video src={api.videoUrl(entryId)} controls className="w-full rounded-lg bg-gray-950" />
       </div>
     </div>
   )
@@ -240,7 +240,7 @@ function TimerButton({ display, running, onToggle, onReset, onAdjust }: {
   const clicksRef = useRef(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function handleClick() {
+  function handleTimerClick() {
     clicksRef.current += 1
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(() => {
@@ -256,7 +256,7 @@ function TimerButton({ display, running, onToggle, onReset, onAdjust }: {
 
   return (
     <button
-      onClick={handleClick}
+      onClick={handleTimerClick}
       onWheel={handleWheel}
       className={cn('font-mono text-sm tabular-nums select-none', running ? 'opacity-100' : 'opacity-60 hover:opacity-100')}
       title="Click to start/pause · Double-click to reset · Scroll to adjust"
@@ -281,7 +281,7 @@ function BottomNav({
 
   return (
     <div
-      className="flex items-center justify-center gap-4 sm:gap-6 px-4 py-4 transition-opacity duration-300 shrink-0"
+      className="flex items-center justify-center gap-4 sm:gap-6 p-4 transition-opacity duration-300 shrink-0"
       style={{ opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none' }}
     >
       <TimerButton
@@ -386,6 +386,11 @@ export default function Freewrite() {
     return () => document.removeEventListener('keydown', fn)
   }, [backspaceEnabled])
 
+  // Focus editor when an entry is selected (replaces autoFocus)
+  useEffect(() => {
+    if (!isMobile && activeId && textareaRef.current) textareaRef.current.focus()
+  }, [activeId, isMobile])
+
   async function selectEntry(id: string) {
     const entry = entries.find(e => e.id === id)
     activeIdRef.current = id
@@ -475,7 +480,10 @@ export default function Freewrite() {
         ) : entries.map(entry => (
           <div
             key={entry.id}
+            role="button"
+            tabIndex={0}
             onClick={() => selectEntry(entry.id)}
+            onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && selectEntry(entry.id)}
             className={cn(
               'px-4 py-3 border-b border-border/50 cursor-pointer flex items-start gap-2 hover:bg-muted/30 transition-colors',
               activeId === entry.id && 'bg-muted/50'
@@ -536,7 +544,6 @@ export default function Freewrite() {
             lineHeight: `${fontSize * 1.5}px`,
           }}
           placeholder={text.trim() === '' ? placeholderRef.current : ''}
-          autoFocus={!isMobile}
           spellCheck
         />
       ) : (

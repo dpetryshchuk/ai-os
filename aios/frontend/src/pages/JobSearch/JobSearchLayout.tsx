@@ -15,7 +15,7 @@ export default function JobSearchLayout() {
         {!isChat && (
           <button
             onClick={() => setPanelOpen(o => !o)}
-            className="absolute bottom-4 right-4 z-20 w-9 h-9 flex items-center justify-center rounded-full bg-foreground text-background shadow-lg hover:opacity-80 transition-opacity"
+            className="absolute bottom-4 right-4 z-20 size-9 flex items-center justify-center rounded-full bg-foreground text-background shadow-lg hover:opacity-80 transition-opacity"
             title="Toggle Jobby chat"
           >
             <MessageSquare size={16} />
