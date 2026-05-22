@@ -163,7 +163,7 @@ export default function Leads() {
                       <td className="py-2.5 px-4 font-medium">
                         <div className="flex items-center gap-2 min-w-0">
                           {isNew(lead.scraped_at) && (
-                            <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-500" title="Added today" />
+                            <span className="shrink-0 size-1.5 rounded-full bg-emerald-500" title="Added today" />
                           )}
                           <span className="truncate">{lead.title}</span>
                         </div>
@@ -201,7 +201,7 @@ function LeadCard({ lead }: { lead: Lead }) {
   return (
     <div className="px-4 py-3 flex items-start gap-3">
       {isNew(lead.scraped_at) && (
-        <div className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        <div className="mt-1.5 shrink-0 size-1.5 rounded-full bg-emerald-500" />
       )}
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium leading-snug truncate">{lead.title}</div>

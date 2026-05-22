@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { ChevronRight, Send, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -71,7 +72,7 @@ function MessageBubble({ msg }: { msg: Message }) {
             <>
               <div
                 className="prose prose-sm prose-neutral max-w-none"
-                dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) as string }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(msg.text) as string) }}
               />
               {msg.toolCalls && msg.toolCalls.length > 0 && (
                 <div className="mt-2 flex flex-col gap-1.5">
@@ -194,12 +195,12 @@ export default function ChatPanel({ onClose }: { onClose: () => void }) {
     <div className="flex flex-col h-full bg-background">
       <div className="shrink-0 flex items-center justify-between px-3 py-2.5 border-b border-border">
         <p className="text-xs font-semibold text-foreground">Jobby</p>
-        <button onClick={onClose} className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground transition-colors">
+        <button onClick={onClose} className="size-6 flex items-center justify-center rounded hover:bg-muted text-muted-foreground transition-colors">
           <X size={13} />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-2.5">
+      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5">
         {messages.length === 0 && (
           <p className="text-xs text-muted-foreground text-center mt-10 leading-relaxed">
             Ask Jobby to take action on what you see.
@@ -223,7 +224,7 @@ export default function ChatPanel({ onClose }: { onClose: () => void }) {
           <button
             onClick={send}
             disabled={streaming || !input.trim()}
-            className="shrink-0 flex items-center justify-center w-8 h-8 rounded-lg bg-foreground text-background disabled:opacity-40 hover:opacity-80 transition-opacity"
+            className="shrink-0 flex items-center justify-center size-8 rounded-lg bg-foreground text-background disabled:opacity-40 hover:opacity-80 transition-opacity"
           >
             <Send size={13} />
           </button>

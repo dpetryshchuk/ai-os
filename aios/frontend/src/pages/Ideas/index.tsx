@@ -76,9 +76,12 @@ function IdeaRow({ idea, onUpdate, onDelete }: {
   const [expanded, setExpanded] = useState(false)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [eContent, setEContent] = useState(idea.content)
-  const [eCategory, setECategory] = useState<Category>(idea.category)
-  const [ePriority, setEPriority] = useState<Priority>(idea.priority)
+  const [eContent, setEContent] = useState('')
+  const [eCategory, setECategory] = useState<Category>('idea')
+  const [ePriority, setEPriority] = useState<Priority>('normal')
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => { if (editing) editTextareaRef.current?.focus() }, [editing])
 
   async function patch(body: Partial<Idea>) {
     await fetch(`/api/ideas/${idea.id}`, {
@@ -108,9 +111,9 @@ function IdeaRow({ idea, onUpdate, onDelete }: {
 
   if (editing) {
     return (
-      <div className="border-b border-border bg-muted/10 px-4 py-4 flex flex-col gap-3">
+      <div className="border-b border-border bg-muted/10 p-4 flex flex-col gap-3">
         <textarea
-          autoFocus
+          ref={editTextareaRef}
           value={eContent}
           onChange={e => setEContent(e.target.value)}
           onKeyDown={e => {
@@ -293,7 +296,7 @@ export default function Ideas() {
 
       {/* Add form */}
       {showAdd && (
-        <div className="border-b border-border bg-muted/10 px-4 py-4 flex flex-col gap-3 shrink-0">
+        <div className="border-b border-border bg-muted/10 p-4 flex flex-col gap-3 shrink-0">
           <textarea
             ref={inputRef}
             value={input}

@@ -45,14 +45,14 @@ export default function Pipeline() {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      <div className="sticky top-0 bg-background z-10 px-4 py-4 border-b border-border flex items-center justify-between">
+      <div className="sticky top-0 bg-background z-10 p-4 border-b border-border flex items-center justify-between">
         <h1 className="text-sm font-semibold">Pipeline</h1>
         <span className="text-xs text-muted-foreground font-mono">
           {!loading && !error && `${contacts.length} contacts`}
         </span>
       </div>
 
-      {loading && <p className="px-4 py-6 text-sm text-muted-foreground">Loading...</p>}
+      {loading && <p className="px-4 py-6 text-sm text-muted-foreground">Loading…</p>}
       {error && <p className="px-4 py-6 text-sm text-destructive">Error: {error}</p>}
 
       {!loading && !error && (

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { ChevronRight, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -85,7 +86,7 @@ function MessageBubble({ msg }: { msg: Message }) {
             <>
               <div
                 className="prose prose-sm prose-neutral max-w-none"
-                dangerouslySetInnerHTML={{ __html: marked.parse(msg.text) as string }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(msg.text) as string) }}
               />
               {msg.toolCalls && msg.toolCalls.length > 0 && (
                 <div className="mt-2 flex flex-col gap-1.5">
@@ -203,11 +204,11 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-full">
       {messages.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4 text-center">
-          <div className="w-10 h-10 rounded-full bg-foreground/10 flex items-center justify-center">
-            <div className="w-3 h-3 rounded-full bg-foreground/60" />
+          <div className="size-10 rounded-full bg-foreground/10 flex items-center justify-center">
+            <div className="size-3 rounded-full bg-foreground/60" />
           </div>
           <div>
             <p className="text-xl font-semibold tracking-tight">What's happening today?</p>
@@ -237,7 +238,7 @@ export default function Chat() {
             <button
               onClick={send}
               disabled={streaming || !input.trim()}
-              className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-foreground text-background disabled:opacity-40 hover:opacity-80 transition-opacity"
+              className="shrink-0 flex items-center justify-center size-10 rounded-xl bg-foreground text-background disabled:opacity-40 hover:opacity-80 transition-opacity"
             >
               <Send size={16} />
             </button>

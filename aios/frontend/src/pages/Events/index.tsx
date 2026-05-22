@@ -121,7 +121,7 @@ export default function EventsPage() {
                   <Badge variant={statusVariant(ev.status)}>{ev.status}</Badge>
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{duration(ev)}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">
+                <TableCell suppressHydrationWarning className="text-xs text-muted-foreground">
                   {new Date(ev.created_at).toLocaleString()}
                 </TableCell>
                 <TableCell className="text-xs text-destructive max-w-xs truncate">

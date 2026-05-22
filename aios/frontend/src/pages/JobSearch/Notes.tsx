@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ExternalLink, Pencil, Plus, Search, Send, Sparkles, Trash2, X } from 'lucide-react'
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { cn } from '@/lib/utils'
 
 const STREAM_URL = '/api/jobsearch/agents/stream'
@@ -102,7 +103,7 @@ function NoteRow({ note, onUpdate, onDelete }: {
 
   if (editing) {
     return (
-      <div className="border-b border-border bg-muted/10 px-4 py-4 flex flex-col gap-3">
+      <div className="border-b border-border bg-muted/10 p-4 flex flex-col gap-3">
         <div className="flex gap-2">
           {(['article', 'note'] as const).map(cat => (
             <button
@@ -294,7 +295,7 @@ function AskPanel({ onClose }: { onClose: () => void }) {
           {loading && !answer ? 'Searching…' : (
             <div
               className="prose prose-sm prose-neutral max-w-none"
-              dangerouslySetInnerHTML={{ __html: marked.parse(answer) as string }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(answer) as string) }}
             />
           )}
         </div>
@@ -419,7 +420,7 @@ export default function Notes() {
       {showAsk && <AskPanel onClose={() => setShowAsk(false)} />}
 
       {showAdd && (
-        <div className="border-b border-border bg-muted/10 px-4 py-4 flex flex-col gap-3 shrink-0">
+        <div className="border-b border-border bg-muted/10 p-4 flex flex-col gap-3 shrink-0">
           <div className="flex gap-2">
             {(['article', 'note'] as const).map(cat => (
               <button
@@ -490,7 +491,7 @@ export default function Notes() {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {loading && <p className="px-4 py-6 text-sm text-muted-foreground">Loading...</p>}
+        {loading && <p className="px-4 py-6 text-sm text-muted-foreground">Loading…</p>}
         {error && <p className="px-4 py-6 text-sm text-destructive">Error: {error}</p>}
         {!loading && !error && filtered.length === 0 && (
           <div className="px-4 py-12 text-center">

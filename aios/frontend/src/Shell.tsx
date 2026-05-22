@@ -124,6 +124,10 @@ export default function Shell() {
         <div
           className="fixed inset-0 z-20 bg-black/40 md:hidden"
           onClick={() => setOpen(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close menu"
+          onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setOpen(false)}
         />
       )}
 
@@ -135,7 +139,7 @@ export default function Shell() {
           open ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
       >
-        <div className="px-4 py-4 border-b border-border flex items-center justify-between">
+        <div className="p-4 border-b border-border flex items-center justify-between">
           <span className="text-sm font-semibold tracking-tight">AI OS</span>
           <button
             className="md:hidden text-muted-foreground hover:text-foreground"

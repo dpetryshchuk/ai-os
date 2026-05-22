@@ -61,7 +61,7 @@ export default function Home() {
                 </Badge>
                 <span className="text-sm font-mono">{ev.type}</span>
                 <span className="text-xs text-muted-foreground ml-auto">{ev.source}</span>
-                <span className="text-xs text-muted-foreground">{new Date(ev.created_at).toLocaleTimeString()}</span>
+                <span suppressHydrationWarning className="text-xs text-muted-foreground">{new Date(ev.created_at).toLocaleTimeString()}</span>
               </div>
             ))}
           </div>
