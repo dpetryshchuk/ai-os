@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
-import { ExternalLink, RefreshCw, MapPin, Briefcase } from 'lucide-react'
+import { ExternalLink, RefreshCw, MapPin, Briefcase, Trash2, Settings } from 'lucide-react'
 import { useAgentRefresh } from '@/hooks/useAgentRefresh'
+import ScraperSettings from './ScraperSettings'
 
 interface Lead {
   id: string
@@ -31,6 +32,8 @@ export default function Leads() {
   const [scraping, setScraping] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sourceFilter, setSourceFilter] = useState('All')
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [undoLead, setUndoLead] = useState<Lead | null>(null)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -44,6 +47,33 @@ export default function Leads() {
 
   useEffect(() => { load() }, [load])
   useAgentRefresh(load)
+
+  const setStatus = async (lead: Lead, status: 'new' | 'applied' | 'dropped') => {
+    const prev = leads
+    setLeads(ls => ls.filter(l => l.id !== lead.id))
+    if (status === 'dropped') {
+      setUndoLead(lead)
+      setTimeout(() => setUndoLead(u => (u?.id === lead.id ? null : u)), 5000)
+    }
+    try {
+      const r = await fetch(`/api/jobsearch/leads/${lead.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    } catch (e: any) {
+      setLeads(prev)
+      setUndoLead(null)
+      setError(e.message)
+    }
+  }
+
+  const undoDrop = () => {
+    if (!undoLead) return
+    setStatus(undoLead, 'new')
+    setUndoLead(null)
+  }
 
   const triggerScrape = async () => {
     setScraping(true)
@@ -85,6 +115,14 @@ export default function Leads() {
         </div>
 
         <button
+          onClick={() => setSettingsOpen(true)}
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          title="Scrape settings"
+        >
+          <Settings size={14} />
+        </button>
+
+        <button
           onClick={triggerScrape}
           disabled={scraping}
           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium
@@ -94,6 +132,13 @@ export default function Leads() {
           {scraping ? 'Scraping…' : 'Scrape SD'}
         </button>
       </div>
+
+      {undoLead && (
+        <div className="shrink-0 px-4 py-2 text-xs bg-muted/40 border-b border-border flex items-center justify-between">
+          <span className="text-muted-foreground truncate">Dropped “{undoLead.title}”.</span>
+          <button onClick={undoDrop} className="font-medium hover:underline shrink-0 ml-2">Undo</button>
+        </div>
+      )}
 
       {/* Source filter pills */}
       <div className="shrink-0 px-4 py-2 flex gap-1.5 border-b border-border overflow-x-auto">
@@ -134,7 +179,7 @@ export default function Leads() {
             {/* Mobile */}
             <div className="md:hidden divide-y divide-border">
               {filtered.map(lead => (
-                <LeadCard key={lead.id} lead={lead} />
+                <LeadCard key={lead.id} lead={lead} onDrop={() => setStatus(lead, 'dropped')} />
               ))}
             </div>
 
@@ -146,7 +191,7 @@ export default function Leads() {
                   <col className="w-36" />{/* Company */}
                   <col className="w-28" />{/* Location */}
                   <col className="w-20" />{/* Source */}
-                  <col className="w-10" />{/* Link */}
+                  <col className="w-16" />{/* Actions */}
                 </colgroup>
                 <thead className="sticky top-0 bg-background z-10">
                   <tr className="border-b border-border">
@@ -178,12 +223,22 @@ export default function Leads() {
                         <SourceBadge source={lead.source} />
                       </td>
                       <td className="py-2.5 px-4">
-                        {lead.link && (
-                          <a href={lead.link} target="_blank" rel="noopener noreferrer"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground inline-flex">
-                            <ExternalLink size={13} />
-                          </a>
-                        )}
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {lead.link && (
+                            <a href={lead.link} target="_blank" rel="noopener noreferrer"
+                              className="text-muted-foreground hover:text-foreground inline-flex p-1"
+                              title="Open posting">
+                              <ExternalLink size={13} />
+                            </a>
+                          )}
+                          <button
+                            onClick={() => setStatus(lead, 'dropped')}
+                            className="text-muted-foreground hover:text-destructive p-1"
+                            title="Drop lead"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -193,11 +248,13 @@ export default function Leads() {
           </>
         )}
       </div>
+
+      <ScraperSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   )
 }
 
-function LeadCard({ lead }: { lead: Lead }) {
+function LeadCard({ lead, onDrop }: { lead: Lead; onDrop: () => void }) {
   return (
     <div className="px-4 py-3 flex items-start gap-3">
       {isNew(lead.scraped_at) && (
@@ -218,12 +275,21 @@ function LeadCard({ lead }: { lead: Lead }) {
           {lead.source && <SourceBadge source={lead.source} />}
         </div>
       </div>
-      {lead.link && (
-        <a href={lead.link} target="_blank" rel="noopener noreferrer"
-          className="shrink-0 p-1.5 text-muted-foreground hover:text-foreground transition-colors">
-          <ExternalLink size={14} />
-        </a>
-      )}
+      <div className="shrink-0 flex items-center">
+        {lead.link && (
+          <a href={lead.link} target="_blank" rel="noopener noreferrer"
+            className="p-1.5 text-muted-foreground hover:text-foreground transition-colors">
+            <ExternalLink size={14} />
+          </a>
+        )}
+        <button
+          onClick={onDrop}
+          className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"
+          title="Drop lead"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
     </div>
   )
 }

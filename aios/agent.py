@@ -6,21 +6,59 @@ from typing import AsyncIterator
 import asyncpg
 import litellm
 
-INSTRUCTIONS = """You are a job search CRM assistant. Help the user manage their job search pipeline.
+INSTRUCTIONS = """You are Jobby, the user's job-search CRM assistant.
 
-You have access to tools to:
-- Upsert companies and contacts
-- Track job postings and applications
-- Log interactions
-- Update pipeline stages
-- Search and manage notes
-- Query the database directly
+Your job is to capture complete, accurate information before writing to the
+database. Do NOT call write tools (upsert_*, log_*, update_*) until you have
+every required field — and ideally the useful optional ones too.
 
-Rules:
-- Always call upsert_company first before creating contacts or job postings
-- Never create duplicates — tools search before inserting
-- When logging a reply, first use query_db to find the contact
-- Stage values: Outreached → Responded → Ongoing → Dead
+How to operate:
+
+1. ONE QUESTION AT A TIME.
+   When the user mentions an event ("emailed someone", "got a reply",
+   "applied somewhere", "had a call", "saw a posting"), drive a short
+   interview. Ask one focused question per turn until you have everything.
+   Prefer multiple-choice / short options. Example:
+     "Got a reply from who?
+      (a) name them
+      (b) you don't remember yet — let's check the recent outreach list"
+
+2. SEARCH BEFORE INSERT.
+   Before creating any contact, company, or posting, use query_db or
+   search_notes to check for an existing record. Never create duplicates —
+   if a near-match exists, surface it and ask the user to confirm.
+
+3. RESTATE BEFORE WRITING.
+   Right before any write tool, summarize the action in one short line and
+   wait for explicit confirmation, unless the user already gave it. Example:
+     "About to log: outbound email to Jane Doe at Acme (CTO, source LinkedIn),
+      stage Outreached. Confirm?"
+
+4. DON'T FABRICATE.
+   If you don't know a field (role, company website, source, link), ASK.
+   Empty is better than wrong. Never guess emails, URLs, or names.
+
+5. STAGE TRANSITIONS: Outreached → Responded → Ongoing → Dead.
+   "They replied" → find the contact via query_db, then propose moving them
+   to Responded and confirm.
+   "They went silent" / "no longer interested" → propose Dead and confirm.
+
+6. LEAD STATUS: new → applied / dropped.
+   When the user wants to dismiss a lead ("not interested", "skip that one"),
+   use update_lead_status with status='dropped' — DO NOT delete. Dropped
+   leads are excluded from re-scrapes, so this is how we prune.
+
+7. SCRAPER TUNING.
+   When the user wants to change what gets scraped ("stop showing me senior
+   roles", "add staff engineer to the skip list", "look for ML engineer too"):
+   a) call get_scraper_settings(source='jobspy_sd')
+   b) propose the exact edit (which array, what to add/remove)
+   c) confirm with the user
+   d) call update_scraper_settings with the FULL new config
+
+8. KEEP PROSE SHORT.
+   One question per turn. No long explanations unless asked. After each
+   write, give a one-line confirmation and stop.
 """
 
 TOOLS = [
@@ -153,6 +191,60 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_lead_status",
+            "description": "Set the status on a job_postings row. Use 'dropped' to dismiss a lead (excluded from re-scrapes), 'applied' when the user applied, 'new' to restore.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "lead_id": {"type": "string"},
+                    "status": {"type": "string", "enum": ["new", "applied", "dropped"]},
+                },
+                "required": ["lead_id", "status"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_scraper_settings",
+            "description": "Read the current scraper config for a source (e.g. 'jobspy_sd'). Returns the JSON config so you can show or propose edits.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "source": {"type": "string"},
+                },
+                "required": ["source"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_scraper_settings",
+            "description": "Replace the scraper config for a source. Pass the FULL config object — partial updates are not supported. Always confirm with the user first.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "source": {"type": "string"},
+                    "config": {
+                        "type": "object",
+                        "properties": {
+                            "search_terms":   {"type": "array", "items": {"type": "string"}},
+                            "locations":      {"type": "array", "items": {"type": "string"}},
+                            "area_keywords":  {"type": "array", "items": {"type": "string"}},
+                            "skip_titles":    {"type": "array", "items": {"type": "string"}},
+                            "results_wanted": {"type": "integer"},
+                            "hours_old":      {"type": "integer"},
+                        },
+                    },
+                },
+                "required": ["source", "config"],
+            },
+        },
+    },
 ]
 
 
@@ -245,6 +337,48 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                 return json.dumps({"error": "Only SELECT queries allowed"})
             rows = await pool.fetch(sql)
             return json.dumps([dict(r) for r in rows], default=str)
+
+        elif name == "update_lead_status":
+            row = await pool.fetchrow(
+                "UPDATE job_postings SET status = $2 WHERE id = $1 RETURNING id",
+                inputs["lead_id"], inputs["status"],
+            )
+            if not row:
+                return json.dumps({"error": "Lead not found"})
+            return json.dumps({"ok": True, "id": row["id"], "status": inputs["status"]})
+
+        elif name == "get_scraper_settings":
+            from workers.scrapers.jobspy_scraper import DEFAULT_CONFIG, SOURCE_KEY
+            defaults_by_source = {SOURCE_KEY: DEFAULT_CONFIG}
+            source = inputs["source"]
+            if source not in defaults_by_source:
+                return json.dumps({"error": f"Unknown source: {source}"})
+            row = await pool.fetchrow(
+                "SELECT config, updated_at FROM scraper_settings WHERE source = $1", source,
+            )
+            if not row:
+                return json.dumps({"source": source, "config": defaults_by_source[source], "is_default": True})
+            cfg = row["config"] if isinstance(row["config"], dict) else json.loads(row["config"])
+            merged = {**defaults_by_source[source], **(cfg or {})}
+            return json.dumps({"source": source, "config": merged, "is_default": False, "updated_at": str(row["updated_at"])})
+
+        elif name == "update_scraper_settings":
+            from workers.scrapers.jobspy_scraper import DEFAULT_CONFIG, SOURCE_KEY
+            defaults_by_source = {SOURCE_KEY: DEFAULT_CONFIG}
+            source = inputs["source"]
+            if source not in defaults_by_source:
+                return json.dumps({"error": f"Unknown source: {source}"})
+            merged = {**defaults_by_source[source], **(inputs.get("config") or {})}
+            await pool.execute(
+                """
+                INSERT INTO scraper_settings (source, config, updated_at)
+                VALUES ($1, $2::jsonb, now())
+                ON CONFLICT (source) DO UPDATE
+                  SET config = EXCLUDED.config, updated_at = now()
+                """,
+                source, json.dumps(merged),
+            )
+            return json.dumps({"ok": True, "source": source, "config": merged})
 
         else:
             return json.dumps({"error": f"Unknown tool: {name}"})

@@ -8,6 +8,8 @@ import asyncpg
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
+from workers.scrapers.jobspy_scraper import DEFAULT_CONFIG as JOBSPY_DEFAULTS, SOURCE_KEY as JOBSPY_SOURCE
+
 import db
 from agent import agentic_stream
 from config import settings
@@ -15,12 +17,14 @@ from schemas import (
     AgentStreamRequest,
     ApplicationsResponse,
     ApplicationRow,
+    ContactStageUpdate,
     ContentPostRow,
     ContentResponse,
     EventsResponse,
     FunnelStage,
     LeadsResponse,
     LeadRow,
+    LeadStatusUpdate,
     NoteCreate,
     NoteResponse,
     NoteRow,
@@ -32,6 +36,9 @@ from schemas import (
     ContactRow,
     RetroFunnel,
     RetroResponse,
+    ScraperConfig,
+    ScraperSettingsResponse,
+    ScraperSettingsUpdate,
     WeeklyCount,
     DailyCount,
     SourceStat,
@@ -64,6 +71,36 @@ async def agent_stream(body: AgentStreamRequest, pool: asyncpg.Pool = Depends(db
 
 
 # ── Pipeline ──────────────────────────────────────────────────────────────────
+
+@router.patch("/contacts/{contact_id}")
+async def patch_contact(
+    contact_id: str,
+    body: ContactStageUpdate,
+    pool: asyncpg.Pool = Depends(db.get_jobsearch_pool),
+) -> OkResponse:
+    row = await pool.fetchrow(
+        "UPDATE contacts SET stage = $2 WHERE id = $1 RETURNING id",
+        contact_id, body.stage,
+    )
+    if not row:
+        raise HTTPException(404, "Contact not found")
+    return OkResponse()
+
+
+@router.patch("/leads/{lead_id}")
+async def patch_lead(
+    lead_id: str,
+    body: LeadStatusUpdate,
+    pool: asyncpg.Pool = Depends(db.get_jobsearch_pool),
+) -> OkResponse:
+    row = await pool.fetchrow(
+        "UPDATE job_postings SET status = $2 WHERE id = $1 RETURNING id",
+        lead_id, body.status,
+    )
+    if not row:
+        raise HTTPException(404, "Lead not found")
+    return OkResponse()
+
 
 @router.get("/pipeline")
 async def get_pipeline(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> PipelineResponse:
@@ -304,6 +341,83 @@ async def get_os_events(
         limit,
     )
     return EventsResponse(events=[OsEventRow.model_validate(dict(r)) for r in rows])
+
+
+# ── Scraper settings ──────────────────────────────────────────────────────────
+
+_SCRAPER_DEFAULTS = {
+    JOBSPY_SOURCE: JOBSPY_DEFAULTS,
+}
+
+
+@router.get("/scraper-settings/{source}")
+async def get_scraper_settings(
+    source: str,
+    pool: asyncpg.Pool = Depends(db.get_jobsearch_pool),
+) -> ScraperSettingsResponse:
+    if source not in _SCRAPER_DEFAULTS:
+        raise HTTPException(404, f"Unknown scraper source: {source}")
+    row = await pool.fetchrow(
+        "SELECT config, updated_at FROM scraper_settings WHERE source = $1",
+        source,
+    )
+    if not row:
+        return ScraperSettingsResponse(
+            source=source,
+            config=ScraperConfig(**_SCRAPER_DEFAULTS[source]),
+            is_default=True,
+        )
+    cfg = row["config"] if isinstance(row["config"], dict) else json.loads(row["config"])
+    merged = {**_SCRAPER_DEFAULTS[source], **(cfg or {})}
+    return ScraperSettingsResponse(
+        source=source,
+        config=ScraperConfig(**merged),
+        updated_at=row["updated_at"],
+        is_default=False,
+    )
+
+
+@router.put("/scraper-settings/{source}")
+async def put_scraper_settings(
+    source: str,
+    body: ScraperSettingsUpdate,
+    pool: asyncpg.Pool = Depends(db.get_jobsearch_pool),
+) -> ScraperSettingsResponse:
+    if source not in _SCRAPER_DEFAULTS:
+        raise HTTPException(404, f"Unknown scraper source: {source}")
+    cfg_json = json.dumps(body.config.model_dump())
+    row = await pool.fetchrow(
+        """
+        INSERT INTO scraper_settings (source, config, updated_at)
+        VALUES ($1, $2::jsonb, now())
+        ON CONFLICT (source) DO UPDATE
+          SET config = EXCLUDED.config, updated_at = now()
+        RETURNING config, updated_at
+        """,
+        source, cfg_json,
+    )
+    cfg = row["config"] if isinstance(row["config"], dict) else json.loads(row["config"])
+    return ScraperSettingsResponse(
+        source=source,
+        config=ScraperConfig(**cfg),
+        updated_at=row["updated_at"],
+        is_default=False,
+    )
+
+
+@router.post("/scraper-settings/{source}/reset")
+async def reset_scraper_settings(
+    source: str,
+    pool: asyncpg.Pool = Depends(db.get_jobsearch_pool),
+) -> ScraperSettingsResponse:
+    if source not in _SCRAPER_DEFAULTS:
+        raise HTTPException(404, f"Unknown scraper source: {source}")
+    await pool.execute("DELETE FROM scraper_settings WHERE source = $1", source)
+    return ScraperSettingsResponse(
+        source=source,
+        config=ScraperConfig(**_SCRAPER_DEFAULTS[source]),
+        is_default=True,
+    )
 
 
 # ── Trigger ────────────────────────────────────────────────────────────────────

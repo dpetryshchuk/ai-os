@@ -32,6 +32,27 @@ class NoteUpdate(BaseModel):
     content: str | None = None
 
 
+class ContactStageUpdate(BaseModel):
+    stage: Literal["Outreached", "Responded", "Ongoing", "Dead"]
+
+
+class LeadStatusUpdate(BaseModel):
+    status: Literal["new", "applied", "dropped"]
+
+
+class ScraperConfig(BaseModel):
+    search_terms: list[str] = []
+    locations: list[str] = []
+    area_keywords: list[str] = []
+    skip_titles: list[str] = []
+    results_wanted: int = 30
+    hours_old: int = 25
+
+
+class ScraperSettingsUpdate(BaseModel):
+    config: ScraperConfig
+
+
 # ─── Jobsearch — rows ─────────────────────────────────────────────────────────
 
 
@@ -189,6 +210,13 @@ class TriggerResponse(OkResponse):
 
 class ResumeResponse(OkResponse):
     path: str
+
+
+class ScraperSettingsResponse(OkResponse):
+    source: str
+    config: ScraperConfig
+    updated_at: datetime | None = None
+    is_default: bool = False
 
 
 # ─── Daily Log — requests ─────────────────────────────────────────────────────
