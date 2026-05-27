@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAgentRefresh } from '@/hooks/useAgentRefresh'
 import { ExternalLink, Upload } from 'lucide-react'
+import { StatusPicker } from './StatusPicker'
+
+type LeadStatus = 'new' | 'applied' | 'dropped'
+const LEAD_STATUSES: readonly LeadStatus[] = ['new', 'applied', 'dropped'] as const
+
+const STATUS_STYLES: Partial<Record<LeadStatus, string>> = {
+  applied: 'text-emerald-600 dark:text-emerald-400',
+  new: 'text-amber-600 dark:text-amber-400',
+  dropped: 'text-muted-foreground/40',
+}
 
 interface Application {
   id: string
@@ -9,6 +19,7 @@ interface Application {
   source: string
   link: string | null
   resume_path: string | null
+  status: LeadStatus
 }
 
 interface UploadButtonProps {
@@ -78,6 +89,25 @@ export default function Applications() {
     setApps(prev => prev.map(a => a.id === id ? { ...a, resume_path: path } : a))
   }
 
+  const updateStatus = async (id: string, status: LeadStatus) => {
+    const prev = apps
+    setApps(cs => status === 'applied'
+      ? cs.map(a => a.id === id ? { ...a, status } : a)
+      : cs.filter(a => a.id !== id)
+    )
+    try {
+      const r = await fetch(`/api/jobsearch/leads/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+    } catch (e: any) {
+      setApps(prev)
+      setError(e.message)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full overflow-y-auto">
       <div className="sticky top-0 bg-background z-10 p-4 border-b border-border flex items-center justify-between">
@@ -103,12 +133,20 @@ export default function Applications() {
                 <div className="flex-1 min-w-0 flex flex-col gap-1">
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-sm font-medium leading-snug">{app.title}</span>
-                    {app.link && (
-                      <a href={app.link} target="_blank" rel="noopener noreferrer"
-                        className="shrink-0 p-1 text-muted-foreground hover:text-foreground transition-colors">
-                        <ExternalLink size={14} />
-                      </a>
-                    )}
+                    <div className="shrink-0 flex items-center gap-1">
+                      <StatusPicker
+                        value={app.status}
+                        options={LEAD_STATUSES}
+                        onChange={s => updateStatus(app.id, s)}
+                        styles={STATUS_STYLES}
+                      />
+                      {app.link && (
+                        <a href={app.link} target="_blank" rel="noopener noreferrer"
+                          className="p-1 text-muted-foreground hover:text-foreground transition-colors">
+                          <ExternalLink size={14} />
+                        </a>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
                     {app.company_name && <span>{app.company_name}</span>}
@@ -130,7 +168,7 @@ export default function Applications() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    {['Role', 'Company', 'Source', 'Resume', ''].map(h => (
+                    {['Role', 'Company', 'Source', 'Status', 'Resume', ''].map(h => (
                       <th key={h} className="text-left py-2 px-3 text-[10px] font-mono uppercase tracking-widest text-muted-foreground font-normal">
                         {h}
                       </th>
@@ -143,6 +181,14 @@ export default function Applications() {
                       <td className="py-2.5 px-3 font-medium">{app.title}</td>
                       <td className="py-2.5 px-3 text-muted-foreground">{app.company_name ?? '—'}</td>
                       <td className="py-2.5 px-3 text-muted-foreground">{app.source}</td>
+                      <td className="py-2.5 px-3">
+                        <StatusPicker
+                          value={app.status}
+                          options={LEAD_STATUSES}
+                          onChange={s => updateStatus(app.id, s)}
+                          styles={STATUS_STYLES}
+                        />
+                      </td>
                       <td className="py-2.5 px-3">
                         <UploadButton
                           appId={app.id}
@@ -162,7 +208,7 @@ export default function Applications() {
                   ))}
                   {apps.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-muted-foreground text-sm">
+                      <td colSpan={6} className="py-8 text-center text-muted-foreground text-sm">
                         No applications yet. Tell the agent when you apply to a role.
                       </td>
                     </tr>
