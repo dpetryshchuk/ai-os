@@ -48,6 +48,13 @@ FEEDS = [
         "type": "rss_civicengage",
         "category_hint": "library",
     },
+    {
+        "source": "Allevents Murrieta",
+        "url": "https://allevents.in/murrieta",
+        "city": "Murrieta",
+        "type": "rss_jsonld",
+        "category_hint": "general",
+    },
 ]
 
 # CivicEngage uses different namespace URLs per city. We match by local-name
@@ -112,6 +119,10 @@ def _fetch_feed(feed: dict, now: datetime, cutoff: datetime) -> list[dict]:
     })
     resp.raise_for_status()
 
+    # JSON-LD feed (Allevents.in): extract events from <script type="application/ld+json">
+    if feed["type"] == "rss_jsonld":
+        return _parse_jsonld_events(resp.text, feed, now, cutoff)
+
     root = ET.fromstring(resp.content)
     events = []
 
@@ -120,6 +131,78 @@ def _fetch_feed(feed: dict, now: datetime, cutoff: datetime) -> list[dict]:
         if event and event.get("start_date") >= now.strftime("%Y-%m-%d"):
             if event["start_date"] <= cutoff.strftime("%Y-%m-%d"):
                 events.append(event)
+
+    return events
+
+
+def _parse_jsonld_events(html: str, feed: dict, now: datetime, cutoff: datetime) -> list[dict]:
+    """Parse JSON-LD Event/ItemList blocks from HTML (Allevents.in pattern)."""
+    import json as _json
+
+    scripts = re.findall(
+        r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>',
+        html, re.DOTALL,
+    )
+    raw_events = []
+    for s in scripts:
+        try:
+            data = _json.loads(s)
+            if isinstance(data, dict) and data.get("@type") == "ItemList":
+                for item in data.get("itemListElement", []):
+                    ev = item.get("item", {})
+                    if ev.get("@type") == "Event":
+                        raw_events.append(ev)
+            elif isinstance(data, dict) and data.get("@type") == "Event":
+                raw_events.append(data)
+        except (ValueError, KeyError):
+            continue
+
+    # Deduplicate by URL
+    seen = set()
+    unique = []
+    for ev in raw_events:
+        url = ev.get("url", "")
+        if url not in seen:
+            seen.add(url)
+            unique.append(ev)
+
+    events = []
+    for ev in unique:
+        start_date = ev.get("startDate", "")[:10]  # "2026-06-10"
+        if not start_date:
+            continue
+        # Filter to this week
+        if start_date < now.strftime("%Y-%m-%d"):
+            continue
+        if start_date > cutoff.strftime("%Y-%m-%d"):
+            continue
+
+        name = ev.get("name", "Untitled")
+        url = ev.get("url", "")
+        location = ""
+        if isinstance(ev.get("location"), dict):
+            loc = ev["location"]
+            location = loc.get("name", "") or loc.get("address", {}).get("streetAddress", "")
+        description = ev.get("description", "") or ""
+        if isinstance(description, str) and len(description) > 500:
+            description = description[:497] + "..."
+
+        # Category inference
+        text_lower = (name + " " + description).lower()
+        cat = _infer_category(text_lower, feed.get("category_hint", "general"))
+
+        events.append({
+            "title": name,
+            "description": description if isinstance(description, str) else "",
+            "url": url,
+            "start_date": start_date,
+            "end_date": ev.get("endDate", start_date)[:10] if ev.get("endDate") else start_date,
+            "time": "",
+            "location": location,
+            "city": feed["city"],
+            "source": feed["source"],
+            "category": cat,
+        })
 
     return events
 
@@ -168,27 +251,9 @@ def _parse_item(item: ET.Element, feed: dict, now: datetime, cutoff: datetime) -
         description = description[:497] + "..."
 
     # Category inference
-    cat = feed.get("category_hint", "general")
-    text_lower = (title + " " + description).lower()
-    if any(w in text_lower for w in ["concert", "music", "jazz", "band", "live"]):
-        cat = "music"
-    elif any(w in text_lower for w in ["market", "food", "wine", "beer", "brew", "dinner"]):
-        cat = "food & drink"
-    elif any(w in text_lower for w in ["art", "gallery", "paint", "museum", "exhibit"]):
-        cat = "arts"
-    elif any(w in text_lower for w in ["family", "kids", "storytime", "children"]):
-        cat = "family"
-    elif any(w in text_lower for w in ["sport", "yoga", "fitness", "run", "hike"]):
-        cat = "sports & outdoors"
-    elif any(w in text_lower for w in ["business", "chamber", "networking"]):
-        cat = "business"
-    elif any(w in text_lower for w in ["library", "reading", "book"]):
-        cat = "library"
-    elif any(w in text_lower for w in ["festival", "celebration", "juneteenth", "holiday"]):
-        cat = "festival"
+    cat = _infer_category((title + " " + description).lower(), feed.get("category_hint", "general"))
 
     return {
-        "title": title,
         "description": description,
         "url": link,
         "start_date": start_date,
@@ -199,6 +264,29 @@ def _parse_item(item: ET.Element, feed: dict, now: datetime, cutoff: datetime) -
         "source": feed["source"],
         "category": cat,
     }
+
+
+def _infer_category(text_lower: str, hint: str) -> str:
+    """Infer event category from title + description text."""
+    if any(w in text_lower for w in ["concert", "music", "jazz", "band", "live", "kpop"]):
+        return "music"
+    elif any(w in text_lower for w in ["market", "food", "wine", "beer", "brew", "dinner", "chef"]):
+        return "food & drink"
+    elif any(w in text_lower for w in ["art", "gallery", "paint", "museum", "exhibit", "craft", "comedy"]):
+        return "arts"
+    elif any(w in text_lower for w in ["family", "kids", "storytime", "children"]):
+        return "family"
+    elif any(w in text_lower for w in ["sport", "yoga", "fitness", "run", "hike", "golf", "wellness", "retreat"]):
+        return "sports & outdoors"
+    elif any(w in text_lower for w in ["business", "chamber", "networking", "expo"]):
+        return "business"
+    elif any(w in text_lower for w in ["library", "reading", "book"]):
+        return "library"
+    elif any(w in text_lower for w in ["festival", "celebration", "juneteenth", "holiday", "car show"]):
+        return "festival"
+    elif any(w in text_lower for w in ["mental health", "support", "recovery"]):
+        return "community"
+    return hint
 
 
 def _parse_date(s: str) -> Optional[str]:
@@ -264,7 +352,7 @@ def _save_brief(events: list[dict], vault_dir: str):
     lines = [
         f"# Events This Week: {now.strftime('%b %d')} – {week_end.strftime('%b %d, %Y')}",
         "",
-        f"Menifee & Temecula, CA",
+        f"Menifee, Temecula & Murrieta, CA",
         f"Generated: {now.strftime('%A %B %d, %Y')}",
         "",
     ]
