@@ -22,6 +22,7 @@ services:
       GIT_COMMITTER_EMAIL: dmytrodim@gmail.com
       VAULT_DIR: /vault
       FATHOM_WEBHOOK_SECRET: ${FATHOM_WEBHOOK_SECRET}
+      SUPADATA_API_KEY: ${SUPADATA_API_KEY}
     depends_on:
       - postgres
       - redis
