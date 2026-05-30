@@ -254,6 +254,7 @@ def _parse_item(item: ET.Element, feed: dict, now: datetime, cutoff: datetime) -
     cat = _infer_category((title + " " + description).lower(), feed.get("category_hint", "general"))
 
     return {
+        "title": title,
         "description": description,
         "url": link,
         "start_date": start_date,
