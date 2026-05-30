@@ -17,12 +17,14 @@ celery_app.conf.timezone = "UTC"
 
 def _import_handlers() -> dict[str, Callable]:
     from workers.health import run as health_run
+    from workers.scrapers.fathom import run as fathom_run
     from workers.scrapers.jobspy_scraper import run as sd_run
     from workers.scrapers.yc import run as yc_run
     from workers.scrapers.hn import run as hn_run
 
     return {
         "health.check": health_run,
+        "fathom.received": fathom_run,
         "scrape.sd": sd_run,
         "scrape.yc": yc_run,
         "scrape.hn": hn_run,

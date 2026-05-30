@@ -43,3 +43,8 @@ look.dmytropetryshchuk.com {
   import auth
   redir https://home.dmytropetryshchuk.com/look 302
 }
+
+sync.dmytropetryshchuk.com {
+  import auth
+  reverse_proxy localhost:8384
+}

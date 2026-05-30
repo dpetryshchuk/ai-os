@@ -20,6 +20,8 @@ services:
       GIT_AUTHOR_EMAIL: dmytrodim@gmail.com
       GIT_COMMITTER_NAME: Dima
       GIT_COMMITTER_EMAIL: dmytrodim@gmail.com
+      VAULT_DIR: /vault
+      FATHOM_WEBHOOK_SECRET: ${FATHOM_WEBHOOK_SECRET}
     depends_on:
       - postgres
       - redis
@@ -27,6 +29,7 @@ services:
       - jobsearch_uploads:/app/uploads
       - ${WRITING_DIR:-/tmp/writing}:/repo
       - ${FREEWRITE_DIR:-/home/dima/freewrite}:/freewrite
+      - ${VAULT_DIR:-/home/dima/core-aios-kb}:/vault
     networks:
       - internal
     restart: unless-stopped

@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     github_repo: str = ""
     writing_dir: str = "/repo"
     freewrite_dir: str = "/freewrite"
+    vault_dir: str = "/vault"
+    fathom_webhook_secret: str = ""
     port: int = 4116
     notify_email: str = ""
     smtp_host: str = "smtp.gmail.com"

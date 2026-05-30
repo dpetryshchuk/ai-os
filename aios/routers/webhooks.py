@@ -1,3 +1,5 @@
+import hmac
+import hashlib
 from typing import Callable
 
 import asyncpg
@@ -5,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 import db
 import events as ev
+from config import settings
 from schemas import WebhookResponse
 from tasks import process_event
 
@@ -17,9 +20,27 @@ def _verify_noop(body: bytes, headers: dict) -> None:
     pass
 
 
+def _verify_fathom(body: bytes, headers: dict) -> None:
+    """Verify Fathom webhook signature using HMAC-SHA256.
+
+    Fathom sends a `Fathom-Signature` header. The secret is the `whsec_...` value
+    returned when creating the webhook.
+    """
+    secret = settings.fathom_webhook_secret
+    if not secret:
+        raise HTTPException(500, "Fathom webhook secret not configured")
+
+    sig_header = headers.get("fathom-signature", "")
+    if not sig_header:
+        raise HTTPException(401, "Missing Fathom-Signature header")
+
+    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, sig_header):
+        raise HTTPException(401, "Invalid Fathom webhook signature")
+
+
 VERIFIERS: dict[str, Callable[[bytes, dict], None]] = {
-    # Add real verifiers here as webhooks are onboarded
-    # "typebot": _verify_typebot,
+    "fathom": _verify_fathom,
 }
 
 
