@@ -30,6 +30,9 @@ services:
       - ${WRITING_DIR:-/tmp/writing}:/repo
       - ${FREEWRITE_DIR:-/home/dima/freewrite}:/freewrite
       - ${VAULT_DIR:-/home/dima/core-aios-kb}:/vault
+      - /home/dima/whisper-venv:/whisper-venv:ro
+      - /home/dima/.local/bin/whisper-cli:/usr/local/bin/whisper-cli:ro
+      - /home/dima/.cache/whisper-models:/whisper-models:ro
     networks:
       - internal
     restart: unless-stopped
