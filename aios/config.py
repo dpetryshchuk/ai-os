@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     freewrite_dir: str = "/freewrite"
     vault_dir: str = "/vault"
     fathom_webhook_secret: str = ""
+    supadata_api_key: str = ""
     port: int = 4116
     notify_email: str = ""
     smtp_host: str = "smtp.gmail.com"

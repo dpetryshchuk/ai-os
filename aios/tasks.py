@@ -19,6 +19,7 @@ def _import_handlers() -> dict[str, Callable]:
     from workers.health import run as health_run
     from workers.scrapers.fathom import run as fathom_run
     from workers.scrapers.whisper_transcribe import run as whisper_run
+    from workers.scrapers.supadata_transcript import run as supadata_run
     from workers.scrapers.jobspy_scraper import run as sd_run
     from workers.scrapers.yc import run as yc_run
     from workers.scrapers.hn import run as hn_run
@@ -27,6 +28,7 @@ def _import_handlers() -> dict[str, Callable]:
         "health.check": health_run,
         "fathom.received": fathom_run,
         "whisper.transcribe": whisper_run,
+        "supadata.transcript": supadata_run,
         "scrape.sd": sd_run,
         "scrape.yc": yc_run,
         "scrape.hn": hn_run,
