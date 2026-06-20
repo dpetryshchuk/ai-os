@@ -424,7 +424,7 @@ async def reset_scraper_settings(
 
 @router.post("/trigger/{task_type}")
 async def trigger_task(task_type: str, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> TriggerResponse:
-    allowed = {"scrape.sd", "scrape.yc", "scrape.hn", "health.check", "local_events.pull"}
+    allowed = {"scrape.sd", "scrape.yc", "scrape.hn", "health.check"}
     if task_type not in allowed:
         raise HTTPException(400, f"Unknown task type: {task_type}")
     import events as ev
