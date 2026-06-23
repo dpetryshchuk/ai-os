@@ -1,0 +1,15 @@
+# Provider plugins + lockfile cache
+.terraform/
+
+# Local state — contains real secrets and resource IDs. NEVER commit.
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Real variable values (the .example is fine to commit).
+terraform.tfvars
+*.auto.tfvars
+
+# Crash logs
+crash.log
+crash.*.log

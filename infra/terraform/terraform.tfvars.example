@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (gitignored) and fill in real values.
+# Anything sensitive: prefer setting via env var (TF_VAR_hcloud_token=…) instead
+# of writing it to disk.
+
+hcloud_token         = "hetzner-api-token-from-console"
+cloudflare_api_token = "cloudflare-token-with-dns-edit"
+github_token         = "ghp_xxx-PAT-with-repo-scope"
+
+ssh_public_key             = "ssh-ed25519 AAAA... dima@laptop"
+vps_deploy_ssh_private_key = <<EOT
+-----BEGIN OPENSSH PRIVATE KEY-----
+...
+-----END OPENSSH PRIVATE KEY-----
+EOT

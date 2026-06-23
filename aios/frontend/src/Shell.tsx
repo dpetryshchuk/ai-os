@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Activity,
   BookOpen,
   BriefcaseIcon,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   Home,
   Lightbulb,
@@ -57,11 +59,15 @@ const WORKFLOWS: WorkflowSection[] = [
   { label: 'Look', path: '/look', icon: Sparkles },
 ]
 
+const COLLAPSED_KEY = 'aios:sidebar-collapsed'
+
 function NavItem({
   item,
+  collapsed,
   onNavigate,
 }: {
   item: WorkflowSection
+  collapsed: boolean
   onNavigate: () => void
 }) {
   const location = useLocation()
@@ -75,9 +81,11 @@ function NavItem({
         to={item.path}
         end={item.path === '/'}
         onClick={onNavigate}
+        title={collapsed ? item.label : undefined}
         className={({ isActive }) =>
           cn(
-            'flex items-center gap-2 px-3 py-1.5 rounded-md text-sm transition-colors',
+            'flex items-center gap-2 rounded-md text-sm transition-colors',
+            collapsed ? 'justify-center px-2 py-2' : 'px-3 py-1.5',
             isActive
               ? 'bg-primary text-primary-foreground font-medium'
               : 'text-muted-foreground hover:text-foreground hover:bg-muted',
@@ -85,9 +93,9 @@ function NavItem({
         }
       >
         <item.icon className="size-4 shrink-0" />
-        {item.label}
+        {!collapsed && item.label}
       </NavLink>
-      {item.subnav && isActive && (
+      {!collapsed && item.subnav && isActive && (
         <div className="ml-4 mt-0.5 flex flex-col gap-0.5 border-l border-border pl-2">
           {item.subnav.map((sub) => (
             <NavLink
@@ -116,6 +124,14 @@ function NavItem({
 
 export default function Shell() {
   const [open, setOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(COLLAPSED_KEY) === '1'
+  })
+
+  useEffect(() => {
+    window.localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0')
+  }, [collapsed])
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -131,26 +147,45 @@ export default function Shell() {
         />
       )}
 
-      {/* Sidebar — drawer on mobile, fixed column on desktop */}
+      {/* Sidebar — drawer on mobile, fixed (and collapsible) column on desktop */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-30 w-52 shrink-0 border-r border-border bg-background flex flex-col transition-transform duration-200',
+          'fixed inset-y-0 left-0 z-30 shrink-0 border-r border-border bg-background flex flex-col transition-all duration-200',
           'md:relative md:translate-x-0',
+          collapsed ? 'md:w-14' : 'md:w-52',
+          'w-52',
           open ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
         )}
       >
-        <div className="p-4 border-b border-border flex items-center justify-between">
-          <span className="text-sm font-semibold tracking-tight">AI OS</span>
+        <div className={cn(
+          'border-b border-border flex items-center',
+          collapsed ? 'p-2 justify-center' : 'p-4 justify-between',
+        )}>
+          {!collapsed && <span className="text-sm font-semibold tracking-tight">AI OS</span>}
+          <button
+            className="hidden md:inline-flex p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+            onClick={() => setCollapsed(c => !c)}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+          </button>
           <button
             className="md:hidden text-muted-foreground hover:text-foreground"
             onClick={() => setOpen(false)}
+            aria-label="Close menu"
           >
             <X className="size-4" />
           </button>
         </div>
         <nav className="flex-1 overflow-y-auto p-2 flex flex-col gap-0.5">
           {WORKFLOWS.map((item) => (
-            <NavItem key={item.path} item={item} onNavigate={() => setOpen(false)} />
+            <NavItem
+              key={item.path}
+              item={item}
+              collapsed={collapsed}
+              onNavigate={() => setOpen(false)}
+            />
           ))}
         </nav>
       </aside>
@@ -162,6 +197,7 @@ export default function Shell() {
           <button
             onClick={() => setOpen(true)}
             className="text-muted-foreground hover:text-foreground"
+            aria-label="Open menu"
           >
             <Menu className="size-5" />
           </button>

@@ -1,0 +1,49 @@
+#cloud-config
+# cloud-init runs once, on first boot. Anything here happens before any human
+# logs in. The goal: leave the box in the same state your VPS is in today —
+# Docker, Caddy, and the repo checked out at /home/dima/ai-os.
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - gnupg
+  - ufw
+
+users:
+  - name: dima
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    groups: [docker]
+
+write_files:
+  - path: /etc/systemd/system/caddy.service.d/override.conf
+    content: |
+      [Service]
+      # leave Caddy able to bind 80/443
+      AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+runcmd:
+  # ----- Docker (from Docker's official repo, not Ubuntu's older package) -----
+  - install -m 0755 -d /etc/apt/keyrings
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  - chmod a+r /etc/apt/keyrings/docker.gpg
+  - echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list
+  - apt-get update
+  - apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+  # ----- Caddy (host-level systemd service, not a container) -----
+  - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/gpg.key | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+  - curl -fsSL https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt | tee /etc/apt/sources.list.d/caddy-stable.list
+  - apt-get update
+  - apt-get install -y caddy
+
+  # ----- Clone the repo and start the stack -----
+  - sudo -u dima git clone https://github.com/${github_repo}.git /home/dima/ai-os
+  - cp /home/dima/ai-os/caddy/Caddyfile /etc/caddy/Caddyfile
+  - systemctl reload-or-restart caddy
+  # docker compose up needs an .env file with secrets — provisioned out of band
+  # (e.g. with `scp` after first boot, or pulled from a secrets manager).
