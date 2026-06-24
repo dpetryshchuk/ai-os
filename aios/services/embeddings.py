@@ -14,13 +14,15 @@ def _vec_str(v: list[float]) -> str:
 def embed_sync(text: str) -> list[float]:
     """Synchronous embedding — for use in Celery tasks."""
     resp = litellm.embedding(model=EMBEDDING_MODEL, input=[text[:8000]])
-    return resp.data[0].embedding
+    d = resp.data[0]
+    return d["embedding"] if isinstance(d, dict) else d.embedding
 
 
 async def embed_async(text: str) -> list[float]:
     """Async embedding — for use in FastAPI routes."""
     resp = await litellm.aembedding(model=EMBEDDING_MODEL, input=[text[:8000]])
-    return resp.data[0].embedding
+    d = resp.data[0]
+    return d["embedding"] if isinstance(d, dict) else d.embedding
 
 
 async def upsert(pool: asyncpg.Pool, source_type: str, source_id: str, text: str) -> None:
