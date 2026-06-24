@@ -35,7 +35,6 @@ SSH tunnel for local DB access: `ssh -L 5432:localhost:5432 dima@46.225.78.10`
 - **Frontend:** React 19 + Vite + Tailwind + Geist + Instrument Serif, built into `aios/public/`
 - **Workers:** Celery + Redis — scrapers and health checks as event-driven tasks
 - **Migrations:** Alembic — `migrations/jobsearch/` + `migrations/daily_log/`, configs in `migrations/*.ini`
-- **Tests:** pytest + pytest-asyncio + httpx; run `pytest` from `aios/`
 - **Deploy:** GitHub Actions → Docker image → GHCR → VPS via SSH
 
 ## Architecture
