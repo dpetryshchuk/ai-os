@@ -13,7 +13,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    # vector extension is enabled in postgres/init.sh (requires superuser).
+    # On existing installs run: psql -U postgres -d jobsearch -c 'CREATE EXTENSION IF NOT EXISTS vector'
     op.execute("""
         CREATE TABLE IF NOT EXISTS embeddings (
             id          TEXT PRIMARY KEY,

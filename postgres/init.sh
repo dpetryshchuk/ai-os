@@ -7,3 +7,8 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
   CREATE USER jobsearch WITH PASSWORD '$JOBSEARCH_DB_PASSWORD';
   CREATE DATABASE jobsearch OWNER jobsearch;
 EOSQL
+
+# Enable pgvector in jobsearch (requires superuser)
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "jobsearch" <<-EOSQL
+  CREATE EXTENSION IF NOT EXISTS vector;
+EOSQL
