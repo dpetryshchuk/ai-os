@@ -33,6 +33,7 @@ def _import_handlers() -> dict[str, Callable]:
         "scrape.yc": yc_run,
         "scrape.hn": hn_run,
         "embed.backfill": lambda payload, session: embed_backfill(),
+        "embed.vault": lambda payload, session: embed_vault(),
     }
 
 
@@ -298,4 +299,49 @@ def embed_backfill() -> dict:
     finally:
         conn.close()
 
+    return counts
+
+
+@celery_app.task(name="embed.vault")
+def embed_vault() -> dict:
+    """Embed all markdown files in the vault into the embeddings table."""
+    from pathlib import Path
+    from services.embeddings import embed_sync, _vec_str
+    import secrets as _secrets
+    import psycopg2
+
+    vault_dir = Path(settings.vault_dir)
+    if not vault_dir.exists():
+        return {"error": "vault not found", "files": 0}
+
+    conn = psycopg2.connect(settings.jobsearch_database_url)
+    counts = {"files": 0, "errors": 0}
+    try:
+        for md_file in vault_dir.rglob("*.md"):
+            rel = str(md_file.relative_to(vault_dir))
+            if ".obsidian" in rel:
+                continue
+            text = md_file.read_text(errors="replace").strip()
+            if not text:
+                continue
+            try:
+                vec = embed_sync(text)
+                eid = _secrets.token_hex(8)
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            INSERT INTO embeddings (id, source_type, source_id, chunk_text, embedding)
+                            VALUES (%s, 'vault', %s, %s, %s::vector)
+                            ON CONFLICT (source_type, source_id) DO UPDATE
+                            SET chunk_text = EXCLUDED.chunk_text, embedding = EXCLUDED.embedding
+                            """,
+                            (eid, rel, text[:4000], _vec_str(vec)),
+                        )
+                counts["files"] += 1
+            except Exception as e:
+                counts["errors"] += 1
+                print(f"embed vault {rel}: {e}")
+    finally:
+        conn.close()
     return counts

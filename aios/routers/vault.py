@@ -60,6 +60,12 @@ def save_file(path: str, body: FileSave):
     target = _safe(path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(body.content)
+    # Embed into vector search after save
+    try:
+        from tasks import embed_document
+        embed_document.delay("vault", path, body.content)
+    except Exception:
+        pass
     return {"ok": True}
 
 

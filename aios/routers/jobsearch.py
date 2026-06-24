@@ -458,7 +458,7 @@ async def semantic_search(
 
 @router.post("/trigger/{task_type}")
 async def trigger_task(task_type: str, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> TriggerResponse:
-    allowed = {"scrape.sd", "scrape.yc", "scrape.hn", "embed.backfill"}
+    allowed = {"scrape.sd", "scrape.yc", "scrape.hn", "embed.backfill", "embed.vault"}
     if task_type not in allowed:
         raise HTTPException(400, f"Unknown task type: {task_type}")
     import json, secrets as _s
