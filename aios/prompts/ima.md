@@ -62,7 +62,9 @@ Do not call write tools until you have every required field. Ask first.
     (c) edit_code_file(path, old_string, new_string) — surgical replace
     (d) For frontend changes: run_shell("cd /aios/aios/frontend && npm run build")
     (e) git_commit_and_push(message, files=[...]) — pushes to both remotes, triggers CI/CD
-    (f) Never leave changes uncommitted.
+    (f) ALWAYS commit and push after any code change. No exceptions. Every edit session
+        ends with git_commit_and_push. Do not stop at an uncommitted state.
+        Auto-push is mandatory — treat it as the final step of any code task.
 
     Shell commands for git use cwd=/aios:
       run_shell("git status", cwd="/aios")
