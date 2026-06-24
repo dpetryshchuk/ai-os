@@ -268,6 +268,7 @@
   <ul>
     <li><a href="#webhooks">Webhooks</a></li>
     <li><a href="#sessions">Chat Sessions</a></li>
+    <li><a href="#shortcuts">Keyboard Shortcuts</a></li>
     <li><a href="#vault">Obsidian Vault</a></li>
     <li><a href="#self-editing">Self-Editing</a></li>
   </ul>
@@ -309,7 +310,7 @@
 <span class="dim">  Fathom    — meeting recordings (webhooks → vault notes)</span></div>
 
 <div class="callout info">
-  <p><strong>One repo, two personalities.</strong> <code>home.dmytropetryshchuk.com</code> = personal light theme. <code>onekeyflow.com</code> = agency dark theme. The distinction is made in the browser: <code>IS_OKF = hostname.includes('onekeyflow')</code> applies the <code>dark</code> class to <code>&lt;html&gt;</code>.</p>
+  <p><strong>One repo, two personalities.</strong> <code>home.dmytropetryshchuk.com</code> = personal light theme. <code>onekeyflow.com</code> = agency dark theme. The distinction is made in the browser: <code>IS_OKF = hostname.includes('onekeyflow')</code> applies the <code>dark</code> class to <code>&lt;html&gt;</code>. Both domains share the same backend, database, and Ima instance.</p>
 </div>
 </section>
 
@@ -573,8 +574,10 @@ pending → processing → done
   <div class="tool-card"><h4>semantic_search</h4><p>Vector similarity search across notes, jobs, vault</p></div>
   <div class="tool-card"><h4>run_shell</h4><p>Execute any shell command on the VPS</p></div>
   <div class="tool-card"><h4>fetch_url</h4><p>Fetch and parse a webpage</p></div>
-  <div class="tool-card"><h4>read_file</h4><p>Read any file in the codebase (/repo/aios/)</p></div>
-  <div class="tool-card"><h4>write_file</h4><p>Write to a file in /repo/aios/</p></div>
+  <div class="tool-card"><h4>read_code_file</h4><p>Read any file in the codebase (/repo/aios/)</p></div>
+  <div class="tool-card"><h4>edit_code_file</h4><p>Surgical string replacement in a file</p></div>
+  <div class="tool-card"><h4>search_files</h4><p>Grep-style search across repo</p></div>
+  <div class="tool-card"><h4>list_code_files</h4><p>List files in a directory</p></div>
   <div class="tool-card"><h4>git_commit_and_push</h4><p>Commit + push to both remotes (triggers CI/CD)</p></div>
   <div class="tool-card"><h4>read_memory</h4><p>Read USER.md or MEMORY.md</p></div>
   <div class="tool-card"><h4>append_memory</h4><p>Save a fact to persistent memory files</p></div>
@@ -596,6 +599,9 @@ pending → processing → done
 </table>
 
 <p>Both files are prepended to the system prompt — Ima has full context without the user re-explaining anything. The Evermemos pattern (every 5 exchanges) nudges Ima to ask if anything is worth saving to memory.</p>
+
+<h3>Job lead lifecycle</h3>
+<p>Job leads flow through statuses: <code>new → applied / dropped</code>. Dropping a lead sets <code>status='dropped'</code> — the record is <strong>never deleted</strong>, just hidden from main views. This preserves history for retrospectives. The Leads page has a Trash2 button that calls <code>update_lead_status(status='dropped')</code>.</p>
 </section>
 
 <section id="litellm">
@@ -702,7 +708,7 @@ def embed_document(source_type, source_id, text):
 <tr><th>Library</th><th>Why</th></tr>
 <tr><td>React 19</td><td>Latest — concurrent features, actions</td></tr>
 <tr><td>Vite</td><td>Fast dev server with HMR; <code>npm run dev</code> proxies <code>/api/*</code> → <code>localhost:4116</code></td></tr>
-<tr><td>Tailwind v4</td><td>Utility classes; <code>darkMode: 'class'</code> for domain-based theming</td></tr>
+<tr><td>Tailwind v3</td><td>Utility classes; <code>darkMode: 'class'</code> for domain-based theming; <code>@tailwindcss/typography</code> for prose rendering</td></tr>
 <tr><td>React Router v6</td><td>Client-side routing — one HTML file, many "pages"</td></tr>
 <tr><td>marked + DOMPurify</td><td>Render Ima's markdown responses safely (sanitized HTML)</td></tr>
 <tr><td>Geist Variable</td><td>Primary sans-serif font</td></tr>
@@ -723,7 +729,7 @@ npm run build  # tsc -b && vite build → aios/public/
 <tr><td><code>src/App.tsx</code></td><td>React Router route definitions</td></tr>
 <tr><td><code>src/pages/Home/</code></td><td>Dashboard with recent Fathom meetings</td></tr>
 <tr><td><code>src/pages/Vault/</code></td><td>Two-pane knowledge base browser (tree + markdown viewer/editor)</td></tr>
-<tr><td><code>src/pages/Finances/</code></td><td>Finances overview, pipeline, subscriptions tabs</td></tr>
+<tr><td><code>src/pages/Finances/</code></td><td>Single scrolling finance dashboard — Overview, CashFlow, NetWorth, Budget, GoalBar, Pipeline, Tiles, SpendCards (Groceries/Dining), SubsCard, PLChart, AccountsDebt, ToolStack, Networking, TaxCard, Ledger — data hardcoded (mirroring VPS data.js); ledger + budgets fetched from API</td></tr>
 </table>
 </section>
 
@@ -736,8 +742,9 @@ npm run build  # tsc -b && vite build → aios/public/
 <ul class="bullets">
   <li><strong>Pinnable</strong> — pin open so it stays visible while navigating between pages</li>
   <li><strong>Session history</strong> — every conversation is saved; tap History to resume any past chat</li>
-  <li><strong>Cross-domain handoff</strong> — navigate to <code>onekeyflow.com?session=abc</code> to continue a chat started on the personal site</li>
+  <li><strong>Escape to close</strong> — pressing Escape closes and unpins the panel without touching the keyboard shortcut</li>
   <li><strong>Inline tool cards</strong> — tool calls appear between text segments in chronological order, not grouped at the bottom</li>
+  <li><strong>Textarea auto-focus</strong> — the input keeps focus on send and re-focuses after Ima responds, so you can type immediately</li>
   <li><strong>Evermemos</strong> — every 5 exchanges, Ima prompts "Worth remembering?" to capture insights to MEMORY.md</li>
 </ul>
 
@@ -930,7 +937,10 @@ Writes to <span class="hi3">/vault/Meetings/YYYY-MM-DD - Title.md</span>
   <span class="dim">OpenAI embedding → pgvector upsert</span>
 
 Result: Ima can now find this meeting via semantic_search
-"what did I discuss with Bram?" → surfaces the vault note</div>
+"what did I discuss with Bram?" → surfaces the vault note
+
+<span class="dim">Note: search_notes only queries the notes DB table. Fathom meetings are
+vault files — Ima must use semantic_search(source_type="vault") to find them.</span></div>
 </section>
 
 <section id="sessions">
@@ -938,16 +948,39 @@ Result: Ima can now find this meeting via semantic_search
 
 <p>Every Ima conversation is saved to <code>sessions.db</code> with a UUID. The session stores the full message history and a generated title (first user message, cleaned up).</p>
 
-<h3>Cross-domain handoff</h3>
-<p>When switching between domains, the session ID travels as a URL parameter:</p>
+<table>
+<tr><th>Endpoint</th><th>What</th></tr>
+<tr><td>GET /api/sessions</td><td>List all past sessions (id, title, created_at)</td></tr>
+<tr><td>GET /api/sessions/{id}</td><td>Full message history for one session</td></tr>
+<tr><td>POST /api/sessions/{id}</td><td>Append messages to an existing session</td></tr>
+<tr><td>DELETE /api/sessions/{id}</td><td>Delete a session</td></tr>
+</table>
 
-<pre><code>// In Shell.tsx — before navigating away
-window.location.href = `https://onekeyflow.com?session=${sessionIdRef.current}`
+<p>Sessions are scoped to the same <code>sessions.db</code> regardless of which domain is accessed — the personal and agency sites share history. There is no cross-domain URL handoff; both domains simply read the same session store.</p>
+</section>
 
-// On load — restore session from URL param
-const sessionId = new URLSearchParams(location.search).get('session')
-if (sessionId) loadSession(sessionId)
-// Both domains hit the same /api/sessions backend</code></pre>
+<section id="shortcuts">
+<h2>Keyboard Shortcuts</h2>
+
+<p>Global keyboard shortcuts are defined in <code>src/hooks/useKeyboardShortcuts.ts</code>. They use <code>e.code</code> (physical key position) rather than <code>e.key</code> so Option+digit works correctly on Mac even when the key produces a non-ASCII character like <code>¡</code>.</p>
+
+<h3>Personal domain shortcuts</h3>
+<table>
+<tr><th>Shortcut</th><th>Action</th></tr>
+<tr><td><code>Option/Alt + 1</code></td><td>Home</td></tr>
+<tr><td><code>Option/Alt + 2</code></td><td>Events</td></tr>
+<tr><td><code>Option/Alt + 3</code></td><td>Ideas</td></tr>
+<tr><td><code>Option/Alt + 4</code></td><td>Job Search</td></tr>
+<tr><td><code>Option/Alt + 5</code></td><td>Writing</td></tr>
+<tr><td><code>Option/Alt + 6</code></td><td>Daily Log</td></tr>
+<tr><td><code>Option/Alt + 7</code></td><td>Look</td></tr>
+<tr><td><code>Option/Alt + 8</code></td><td>Finances</td></tr>
+<tr><td><code>Option/Alt + 9</code></td><td>Knowledge Base (Vault)</td></tr>
+<tr><td><code>Option/Alt + I</code></td><td>Toggle Ima panel</td></tr>
+<tr><td><code>Escape</code></td><td>Close Ima panel</td></tr>
+<tr><td><code>]</code></td><td>Toggle sidebar</td></tr>
+<tr><td><code>?</code></td><td>Show shortcut helper</td></tr>
+</table>
 </section>
 
 <section id="vault">
@@ -972,10 +1005,11 @@ if (sessionId) loadSession(sessionId)
 <p>Ima can modify her own codebase — update prompts, add features, fix bugs — and push to git to trigger an auto-redeploy.</p>
 
 <ul class="bullets">
-  <li><code>read_file(path)</code> reads from <code>/repo/aios/{path}</code></li>
-  <li><code>write_file(path, content)</code> writes to <code>/repo/aios/{path}</code></li>
+  <li><code>read_code_file(path)</code> reads from <code>/repo/aios/{path}</code></li>
+  <li><code>edit_code_file(path, old, new)</code> surgical string replace in a file</li>
+  <li><code>search_files(query, dir)</code> grep-style search across the codebase</li>
   <li><code>run_shell(cmd)</code> can run anything: <code>git diff</code>, <code>grep</code>, <code>npm run build</code></li>
-  <li><code>git_commit_and_push(message)</code> commits and pushes to both remotes</li>
+  <li><code>git_commit_and_push(message, files)</code> commits and pushes to both remotes</li>
   <li>CI/CD picks up the push → Docker rebuild → rolling container restart (~2 min)</li>
 </ul>
 
@@ -983,7 +1017,9 @@ if (sessionId) loadSession(sessionId)
   <p><strong>The rule: always use <code>/repo/aios/</code>.</strong> The <code>/app/</code> directory is baked into the Docker image at build time. Edits there disappear on the next deploy. Only <code>/repo/</code> is the persistent git checkout that survives container recreation.</p>
 </div>
 
-<p>The system prompt (<code>prompts/ima.md</code>) contains explicit rules enforcing this, plus: always read <code>frontend-design.md</code> before making UI changes, and always push to both remotes.</p>
+<div class="callout info">
+  <p><strong>Mandatory push.</strong> The system prompt (<code>prompts/ima.md</code> rule 12f) requires Ima to always commit and push after any code change — no session ends with uncommitted edits. Every code task ends with <code>git_commit_and_push</code>. For frontend changes, she runs <code>npm run build</code> first and confirms it passes before pushing.</p>
+</div>
 </section>
 
 </main>
