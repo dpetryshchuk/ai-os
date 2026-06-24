@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, CheckCircle, XCircle } from 'lucide-react'
+import { Activity, CheckCircle, Video, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 
 type AppHealth = Record<string, 'ok' | 'error'>
@@ -18,10 +18,12 @@ type OsEvent = {
 export default function Home() {
   const [health, setHealth] = useState<AppHealth>({})
   const [events, setEvents] = useState<OsEvent[]>([])
+  const [meetings, setMeetings] = useState<{ filename: string; title: string; modified: number; share_url: string }[]>([])
 
   useEffect(() => {
     fetch('/api/home/health').then(r => r.json()).then(d => setHealth(d.apps || {}))
     fetch('/api/jobsearch/events?limit=5').then(r => r.json()).then(d => setEvents(d.events || []))
+    fetch('/api/home/meetings').then(r => r.json()).then(d => setMeetings(d.meetings || []))
   }, [])
 
   return (
@@ -67,6 +69,29 @@ export default function Home() {
           </div>
         )}
       </section>
+
+      {meetings.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-2">
+            <Video className="size-4" /> Recent Meetings
+          </h2>
+          <div className="flex flex-col gap-2">
+            {meetings.map(m => (
+              <div key={m.filename} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2">
+                <span className="text-sm flex-1 truncate">{m.title}</span>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {new Date(m.modified * 1000).toLocaleDateString()}
+                </span>
+                {m.share_url && (
+                  <a href={m.share_url} target="_blank" rel="noreferrer" className="text-xs text-blue-400 hover:underline shrink-0">
+                    Watch ↗
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   )
 }

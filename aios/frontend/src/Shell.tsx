@@ -284,6 +284,15 @@ function ImaMsgBubble({ msg }: { msg: ImaMsg }) {
   )
 }
 
+function generateTitle(history: { role: string; content: string }[]): string {
+  if (history.length === 0) return 'Chat'
+  const firstUser = history.find(m => m.role === 'user')?.content || ''
+  const cleaned = firstUser
+    .replace(/^(hey|hi|hello|can you|please|could you|i need|i want to|help me)[,\s]*/i, '')
+    .trim()
+  return cleaned.slice(0, 55) || 'Chat'
+}
+
 function ImaPanel({
   onClose,
   onTogglePin,
@@ -305,6 +314,7 @@ function ImaPanel({
   const historyRef = useRef<{ role: string; content: string }[]>([])
   const thinkingIdxRef = useRef(0)
   const sessionIdRef = useRef<string | null>(null)
+  const exchangeCountRef = useRef(0)
   const currentDomain = IS_OKF ? 'business' : 'personal'
   const otherDomain = IS_OKF ? 'https://home.dmytropetryshchuk.com' : 'https://onekeyflow.com'
   const otherDomainLabel = IS_OKF ? '→ Personal' : '→ OKF'
@@ -384,7 +394,10 @@ function ImaPanel({
         }
       }
       updateMsg(aid, m => m.thinking ? { ...m, text: textContent || '...', thinking: false } : m)
-      if (textContent) historyRef.current = [...historyRef.current, { role: 'assistant', content: textContent }]
+      if (textContent) {
+        historyRef.current = [...historyRef.current, { role: 'assistant', content: textContent }]
+        exchangeCountRef.current += 1
+      }
     } catch (err) {
       clearInterval(iv)
       const msg = err instanceof Error ? err.message : 'Error'
@@ -393,7 +406,7 @@ function ImaPanel({
     } finally {
       setStreaming(false)
       if (historyRef.current.length > 0) {
-        const title = historyRef.current[0]?.content?.slice(0, 60) ?? 'Chat'
+        const title = generateTitle(historyRef.current)
         fetch('/api/sessions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -558,6 +571,18 @@ function ImaPanel({
           <div className="flex-1 overflow-y-auto px-3 py-4">
             <div className="flex flex-col gap-3">
               {messages.map(m => <ImaMsgBubble key={m.id} msg={m} />)}
+              {exchangeCountRef.current > 0 && exchangeCountRef.current % 5 === 0 && !streaming && (
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => {
+                      setInput('Summarize what we should remember from this conversation and save it to memory.')
+                    }}
+                    className="text-[10px] text-muted-foreground hover:text-foreground transition-colors underline underline-offset-2"
+                  >
+                    💡 Worth remembering?
+                  </button>
+                </div>
+              )}
               <div ref={endRef} />
             </div>
           </div>

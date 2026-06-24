@@ -47,7 +47,7 @@ const EMPTY: FormValues = {
 }
 
 function Field({
-  label, name, value, onChange, multiline = false, placeholder = '',
+  label, name, value, onChange, multiline = false, placeholder = '', rows = 4,
 }: {
   label: string
   name: keyof FormValues
@@ -55,6 +55,7 @@ function Field({
   onChange: (name: keyof FormValues, value: string) => void
   multiline?: boolean
   placeholder?: string
+  rows?: number
 }) {
   return (
     <div className="flex flex-col gap-1">
@@ -64,7 +65,7 @@ function Field({
           value={value}
           onChange={e => onChange(name, e.target.value)}
           placeholder={placeholder}
-          rows={4}
+          rows={rows}
           className="w-full rounded-lg border border-border bg-transparent px-2.5 py-2 text-sm transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring resize-none"
         />
       ) : (
@@ -344,56 +345,58 @@ export default function Proposals() {
       </div>
 
       <form onSubmit={submit} className="flex flex-col gap-6">
-        {/* Client info */}
+        {/* Client Info */}
         <div className="rounded-xl border border-border p-6 flex flex-col gap-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Client</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Client Info</p>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="First name" name="firstName" value={form.firstName} onChange={set} />
-            <Field label="Last name" name="lastName" value={form.lastName} onChange={set} />
+            <Field label="First name" name="firstName" value={form.firstName} onChange={set} placeholder="Jane" />
+            <Field label="Last name" name="lastName" value={form.lastName} onChange={set} placeholder="Smith" />
           </div>
-          <Field label="Company" name="company" value={form.company} onChange={set} />
-          <Field label="Email" name="email" value={form.email} onChange={set} />
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Company" name="company" value={form.company} onChange={set} placeholder="Acme Inc." />
+            <Field label="Email" name="email" value={form.email} onChange={set} placeholder="jane@acme.com" />
+          </div>
         </div>
 
-        {/* Scope */}
+        {/* Project Brief */}
         <div className="rounded-xl border border-border p-6 flex flex-col gap-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Scope</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Project Brief</p>
           <Field
             label="Business description"
             name="businessDescription"
             value={form.businessDescription}
             onChange={set}
-            placeholder="One sentence describing their business."
+            multiline
+            rows={3}
+            placeholder="One paragraph describing what they do and who they serve."
           />
           <Field
-            label="Their problem"
+            label="Problem they face"
             name="problem"
             value={form.problem}
             onChange={set}
             multiline
-            placeholder="What's the core problem you're solving?"
+            rows={5}
+            placeholder="Describe the core pain points — manual work, bottlenecks, missed opportunities."
           />
           <Field
-            label="Your solution"
+            label="Solution we're building"
             name="solution"
             value={form.solution}
             onChange={set}
             multiline
-            placeholder="How are you solving it?"
-          />
-          <Field
-            label="Platforms / tools"
-            name="platforms"
-            value={form.platforms}
-            onChange={set}
-            placeholder="e.g. Monday.com, Make.com, Typeform"
+            rows={5}
+            placeholder="How you're solving it — what the system does, what it automates."
           />
         </div>
 
-        {/* Commercial */}
+        {/* Scope & Pricing */}
         <div className="rounded-xl border border-border p-6 flex flex-col gap-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Commercial</p>
-          <Field label="Timeline" name="timeline" value={form.timeline} onChange={set} placeholder="e.g. 3–4 weeks" />
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Scope &amp; Pricing</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Platforms / tools" name="platforms" value={form.platforms} onChange={set} placeholder="Monday.com, Make.com, Typeform" />
+            <Field label="Timeline" name="timeline" value={form.timeline} onChange={set} placeholder="3–4 weeks" />
+          </div>
           <Field label="Price" name="price" value={form.price} onChange={set} placeholder="e.g. 2500" />
         </div>
 
