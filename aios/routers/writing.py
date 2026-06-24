@@ -220,6 +220,18 @@ def git_push(body: GitPush) -> GitResponse:
         )
         if commit.returncode != 0 and not nothing_to_commit:
             raise HTTPException(400, commit.stderr.strip() or commit.stdout.strip() or "git commit failed")
+        # Always fetch + rebase before pushing so a diverged remote never blocks
+        subprocess.run(
+            ["git", "fetch", remote, "main"],
+            cwd=REPO_DIR, capture_output=True, text=True, check=True,
+        )
+        rebase = subprocess.run(
+            ["git", "rebase", "FETCH_HEAD"],
+            cwd=REPO_DIR, capture_output=True, text=True,
+        )
+        if rebase.returncode != 0:
+            subprocess.run(["git", "rebase", "--abort"], cwd=REPO_DIR, capture_output=True, text=True)
+            raise HTTPException(400, "Remote has conflicting changes — pull first")
         result = subprocess.run(
             ["git", "push", remote, "HEAD:main"],
             cwd=REPO_DIR, capture_output=True, text=True, check=True,
