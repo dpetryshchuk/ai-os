@@ -649,12 +649,11 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             from config import settings
             essays = []
             try:
-                writing_dir = settings.writing_dir
-                for fname in sorted(os.listdir(writing_dir))[-limit:]:
-                    if fname.endswith(".md"):
-                        fpath = os.path.join(writing_dir, fname)
-                        content = open(fpath).read()[:3000]  # first 3000 chars
-                        essays.append({"filename": fname, "preview": content})
+                essays_dir = Path(settings.writing_dir) / "content" / "essays"
+                md_files = sorted(essays_dir.rglob("*.md")) if essays_dir.exists() else []
+                for fpath in md_files[-limit:]:
+                    content = fpath.read_text(encoding="utf-8")[:3000]
+                    essays.append({"filename": str(fpath.relative_to(settings.writing_dir)), "preview": content})
             except Exception as e:
                 essays = [{"error": str(e)}]
             return json.dumps(essays)
@@ -762,6 +761,7 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                     if p.is_file() and not any(part.startswith(".") for part in p.parts) and "__pycache__" not in str(p) and "node_modules" not in str(p):
                         files.append(str(p.relative_to(base)))
                 result = {"files": files}
+            return json.dumps(result)
 
         elif name == "search_files":
             import subprocess
