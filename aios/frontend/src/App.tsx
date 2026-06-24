@@ -19,6 +19,7 @@ import Proposals from './pages/Business/Proposals'
 import Revenue from './pages/Business/Revenue'
 import Outreach from './pages/Business/Outreach'
 import OkfEvents from './pages/Business/OkfEvents'
+import Finances from './pages/Finances'
 
 export default function App() {
   return (
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="revenue" element={<Revenue />} />
           <Route path="outreach" element={<Outreach />} />
           <Route path="okf-events" element={<OkfEvents />} />
+          <Route path="finances" element={<Finances />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -27,6 +27,7 @@ services:
       SUPADATA_API_KEY: ${SUPADATA_API_KEY}
       PANDADOC_API_KEY: ${PANDADOC_API_KEY}
       DATA_DIR: /app/data
+      FINANCES_DIR: /home/dima/personal-finances
     depends_on:
       - postgres
       - redis
@@ -39,6 +40,7 @@ services:
       - /home/dima/.local/bin/whisper-cli:/usr/local/bin/whisper-cli:ro
       - /home/dima/.cache/whisper-models:/whisper-models:ro
       - okf_data:/app/data
+      - /home/dima/personal-finances:/home/dima/personal-finances:ro
     networks:
       - internal
     restart: unless-stopped

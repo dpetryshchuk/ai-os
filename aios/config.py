@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     supadata_api_key: str = ""
     pandadoc_api_key: str = ""
     data_dir: str = "/app/data"
+    finances_dir: str = "/home/dima/personal-finances"
     port: int = 4116
     notify_email: str = ""
     smtp_host: str = "smtp.gmail.com"
