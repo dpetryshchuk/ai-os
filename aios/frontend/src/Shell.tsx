@@ -411,6 +411,11 @@ function ImaPanel({
     setShowHistory(false)
   }
 
+  // Auto-focus textarea when panel mounts (i.e. when Ima opens)
+  useEffect(() => {
+    textareaRef.current?.focus()
+  }, [])
+
   return (
     <div className="flex flex-col h-full bg-background border-l border-border">
       {/* Header */}
@@ -469,24 +474,43 @@ function ImaPanel({
             )}
           </div>
         </div>
+      ) : messages.length === 0 ? (
+        /* Empty state: input centered in the column */
+        <div className="flex-1 flex flex-col items-center justify-center px-4 gap-5">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <div className="size-8 rounded-full bg-foreground/10 flex items-center justify-center">
+              <div className="size-2.5 rounded-full bg-foreground/60" />
+            </div>
+            <p className="text-sm font-medium">Ask Ima anything</p>
+          </div>
+          <div className="w-full flex gap-1.5 items-end">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={e => { setInput(e.target.value); adjustHeight() }}
+              onKeyDown={handleKey}
+              placeholder="Ask Ima..."
+              rows={1}
+              className="flex-1 resize-none rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30 min-h-[36px] max-h-[160px] transition-all"
+            />
+            <button
+              onClick={send}
+              disabled={streaming || !input.trim()}
+              className="shrink-0 flex items-center justify-center size-9 rounded-lg bg-foreground text-background disabled:opacity-40 hover:opacity-80 transition-opacity"
+            >
+              <Send size={14} />
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Enter to send · Shift+Enter for newline</p>
+        </div>
       ) : (
         <>
           {/* Messages */}
           <div className="flex-1 overflow-y-auto px-3 py-4">
-            {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-2">
-                <div className="size-8 rounded-full bg-foreground/10 flex items-center justify-center">
-                  <div className="size-2.5 rounded-full bg-foreground/60" />
-                </div>
-                <p className="text-sm font-medium">Ask Ima anything</p>
-                <p className="text-xs text-muted-foreground">Accessible from every page</p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {messages.map(m => <ImaMsgBubble key={m.id} msg={m} />)}
-                <div ref={endRef} />
-              </div>
-            )}
+            <div className="flex flex-col gap-3">
+              {messages.map(m => <ImaMsgBubble key={m.id} msg={m} />)}
+              <div ref={endRef} />
+            </div>
           </div>
 
           {/* Input */}
@@ -673,7 +697,7 @@ export default function Shell() {
 
           {/* Ima panel — pinned (in-flow) */}
           {imaOpen && imaPinned && (
-            <div className="w-[380px] shrink-0 flex flex-col">
+            <div className="w-[520px] shrink-0 flex flex-col">
               <ImaPanel
                 onClose={() => { setImaOpen(false); setImaPinned(false) }}
                 onTogglePin={() => setImaPinned(false)}
@@ -686,7 +710,7 @@ export default function Shell() {
 
         {/* Ima panel — drawer (fixed overlay), starts below the top bar */}
         {imaOpen && !imaPinned && (
-          <div className="fixed right-0 top-9 bottom-0 z-50 w-[380px] shadow-2xl flex flex-col">
+          <div className="fixed right-0 top-9 bottom-0 z-50 w-[520px] shadow-2xl flex flex-col">
             <ImaPanel
               onClose={() => setImaOpen(false)}
               onTogglePin={() => setImaPinned(true)}

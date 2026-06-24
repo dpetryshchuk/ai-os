@@ -19,7 +19,6 @@ const TRIGGERS = [
   { label: 'Scrape SD', type: 'scrape.sd' },
   { label: 'YC', type: 'scrape.yc' },
   { label: 'HN', type: 'scrape.hn' },
-  { label: 'Health', type: 'health.check' },
 ]
 
 function statusVariant(status: string) {

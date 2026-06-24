@@ -16,7 +16,6 @@ celery_app.conf.timezone = "UTC"
 # ── Import workers lazily to avoid circular imports ───────────────────────────
 
 def _import_handlers() -> dict[str, Callable]:
-    from workers.health import run as health_run
     from workers.scrapers.fathom import run as fathom_run
     from workers.scrapers.whisper_transcribe import run as whisper_run
     from workers.scrapers.supadata_transcript import run as supadata_run
@@ -26,7 +25,6 @@ def _import_handlers() -> dict[str, Callable]:
     from workers.scrapers.hn import run as hn_run
 
     return {
-        "health.check": health_run,
         "fathom.received": fathom_run,
         "whisper.transcribe": whisper_run,
         "supadata.transcript": supadata_run,
@@ -182,10 +180,5 @@ celery_app.conf.beat_schedule = {
         "task": "events.run_scheduled",
         "schedule": crontab(hour=8, minute=15),
         "args": ["scrape.hn"],
-    },
-    "health-check-60s": {
-        "task": "events.run_scheduled",
-        "schedule": 60.0,
-        "args": ["health.check"],
     },
 }
