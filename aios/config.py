@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     github_token: str = ""
     github_repo: str = ""
     writing_dir: str = "/repo"
+    aios_repo_dir: str = "/aios"
     freewrite_dir: str = "/freewrite"
     vault_dir: str = "/vault"
     fathom_webhook_secret: str = ""

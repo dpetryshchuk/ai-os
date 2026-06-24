@@ -247,14 +247,16 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "read_code_file",
-            "description": "Read a source file from the AI OS codebase. Use this to understand your own implementation, check how tools work, or read configuration.",
+            "description": "Read a file from the AI OS git repo. Paths are relative to the repo root. Use search_files first to find the right file.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Relative path from aios/ dir, e.g. 'agent.py', 'routers/jobsearch.py', 'prompts/ima.md'",
+                        "description": "Path relative to repo root, e.g. 'aios/agent.py', 'aios/frontend/src/Shell.tsx', 'docker-compose.yml', 'aios/prompts/ima.md'",
                     },
+                    "offset": {"type": "integer", "description": "Line to start reading from (0-indexed). Use for large files."},
+                    "limit": {"type": "integer", "description": "Max lines to return (default 500)."},
                 },
                 "required": ["path"],
             },
@@ -264,12 +266,12 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "edit_code_file",
-            "description": "Make a surgical edit to a source file by replacing an exact string. Use read_code_file first to see the current content. Only edit files you understand.",
+            "description": "Surgical find-and-replace edit in a file. old_string must appear exactly once. Use read_code_file first — edit will fail if old_string doesn't match exactly.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "path": {"type": "string", "description": "Relative path from aios/"},
-                    "old_string": {"type": "string", "description": "The exact string to replace (must be unique in the file)"},
+                    "path": {"type": "string", "description": "Path relative to repo root, e.g. 'aios/frontend/src/Shell.tsx'"},
+                    "old_string": {"type": "string", "description": "The exact string to replace (must appear exactly once in the file)"},
                     "new_string": {"type": "string", "description": "The replacement string"},
                 },
                 "required": ["path", "old_string", "new_string"],
@@ -280,7 +282,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "git_commit_and_push",
-            "description": "Commit staged changes and push to the remote. Only use after making intentional code edits. Always describe what was changed and why.",
+            "description": "Stage, commit, and push changes to the AI OS repo. Triggers CI/CD deploy. Always build frontend first if you edited frontend files.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -288,7 +290,7 @@ TOOLS = [
                     "files": {
                         "type": "array",
                         "items": {"type": "string"},
-                        "description": "List of relative paths (from aios/) to stage. If empty, stages all modified tracked files.",
+                        "description": "Paths relative to repo root to stage, e.g. ['aios/frontend/src/Shell.tsx']. If empty, stages all modified tracked files.",
                     },
                 },
                 "required": ["message"],
@@ -299,13 +301,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "list_code_files",
-            "description": "List files in the AI OS codebase (aios/ directory). Use to explore what files exist before reading them.",
+            "description": "List all files in the AI OS git repo (or a subdirectory). Paths are relative to repo root.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "subdir": {
                         "type": "string",
-                        "description": "Subdirectory to list, e.g. 'routers', 'workers', 'prompts'. Defaults to root aios/.",
+                        "description": "Subdirectory to list, e.g. 'aios', 'aios/routers', 'aios/frontend/src'. Defaults to repo root.",
                     },
                 },
                 "required": [],
@@ -456,14 +458,29 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "run_shell",
-            "description": "Run a shell command in the repo. Use for: npm builds, git operations (status, diff, merge, rebase, conflict resolution), running tests, grep, find, any CLI task. Returns stdout, stderr, exit_code. Default cwd is /repo (the git repo root).",
+            "description": "Run a shell command. Default cwd is /repo (the personal writing site). For AI OS repo commands (builds, git) use cwd=/aios. E.g. cd /aios/aios/frontend && npm run build.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "command": {"type": "string", "description": "Shell command to run"},
-                    "cwd": {"type": "string", "description": "Working directory, defaults to /repo"},
+                    "cwd": {"type": "string", "description": "Working directory, defaults to /repo. Use /aios for AI OS repo operations."},
                 },
                 "required": ["command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_files",
+            "description": "Search for a string across AI OS source files (aios/, frontend/, docker-compose.yml, etc). Faster than run_shell grep. Returns matching files and line-level matches. Use before editing to find the right file.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "String or pattern to search for"},
+                    "subdir": {"type": "string", "description": "Subdirectory to limit search to, e.g. 'aios/frontend/src'. Defaults to entire repo."},
+                },
+                "required": ["query"],
             },
         },
     },
@@ -645,25 +662,29 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
         elif name == "read_code_file":
             from config import settings as app_settings
             rel_path = inputs.get("path", "").lstrip("/")
-            # Always operate on the git repo, not the ephemeral container copy
-            base = Path(app_settings.writing_dir) / "aios"
+            base = Path(app_settings.aios_repo_dir).resolve()
             target = (base / rel_path).resolve()
-            if not str(target).startswith(str(base.resolve())):
-                result = {"error": "Access denied: path outside aios/"}
+            if not str(target).startswith(str(base) + "/") and target != base:
+                result = {"error": "Access denied: path outside aios repo"}
             elif not target.exists():
-                result = {"error": f"File not found: {rel_path}"}
+                # Try to give a helpful hint about what files exist nearby
+                result = {"error": f"File not found: {rel_path}. Use list_code_files to explore."}
             else:
-                content = target.read_text()
-                result = {"path": rel_path, "content": content, "lines": len(content.splitlines())}
+                lines = target.read_text().splitlines()
+                offset = inputs.get("offset", 0)
+                limit = inputs.get("limit", 500)
+                sliced = lines[offset:offset + limit]
+                numbered = "\n".join(f"{offset + i + 1}|{l}" for i, l in enumerate(sliced))
+                result = {"path": rel_path, "content": numbered, "total_lines": len(lines), "shown": len(sliced)}
             return json.dumps(result)
 
         elif name == "edit_code_file":
             from config import settings as app_settings
             rel_path = inputs.get("path", "").lstrip("/")
-            base = Path(app_settings.writing_dir) / "aios"
+            base = Path(app_settings.aios_repo_dir).resolve()
             target = (base / rel_path).resolve()
-            if not str(target).startswith(str(base.resolve())):
-                result = {"error": "Access denied: path outside aios/"}
+            if not str(target).startswith(str(base) + "/") and target != base:
+                result = {"error": "Access denied: path outside aios repo"}
             elif not target.exists():
                 result = {"error": f"File not found: {rel_path}"}
             else:
@@ -672,9 +693,9 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                 content = target.read_text()
                 count = content.count(old_str)
                 if count == 0:
-                    result = {"error": "old_string not found in file"}
+                    result = {"error": "old_string not found in file. Use read_code_file first to verify exact content."}
                 elif count > 1:
-                    result = {"error": f"old_string appears {count} times — be more specific"}
+                    result = {"error": f"old_string appears {count} times — add more surrounding context to make it unique"}
                 else:
                     target.write_text(content.replace(old_str, new_str, 1))
                     result = {"ok": True, "path": rel_path, "message": "Edit applied"}
@@ -684,8 +705,7 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             import subprocess
             from config import settings as app_settings
 
-            # /repo is the git repo root (volume-mounted from VPS)
-            repo_root = Path(app_settings.writing_dir)
+            repo_root = Path(app_settings.aios_repo_dir)
             aios_base = repo_root / "aios"
             msg = inputs.get("message", "agent edit")
             files = inputs.get("files", [])
@@ -701,7 +721,7 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             try:
                 if files:
                     for f in files:
-                        rel = aios_base / f.lstrip("/")
+                        rel = repo_root / f.lstrip("/")
                         subprocess.run(["git", "add", str(rel)], cwd=repo_root, check=True, env=env)
                 else:
                     subprocess.run(["git", "add", "-u"], cwd=repo_root, check=True, env=env)
@@ -729,19 +749,57 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
 
         elif name == "list_code_files":
             from config import settings as app_settings
-            base = Path(app_settings.writing_dir) / "aios"
+            base = Path(app_settings.aios_repo_dir).resolve()
             subdir = inputs.get("subdir", "").lstrip("/")
-            target = (base / subdir).resolve() if subdir else base.resolve()
-            if not str(target).startswith(str(base.resolve())):
+            target = (base / subdir).resolve() if subdir else base
+            if not str(target).startswith(str(base)):
                 result = {"error": "Access denied"}
             elif not target.exists():
-                result = {"error": f"Directory not found: {subdir}"}
+                result = {"error": f"Directory not found: {subdir or '(root)'}"}
             else:
                 files = []
                 for p in sorted(target.rglob("*")):
-                    if p.is_file() and not any(part.startswith(".") for part in p.parts) and "__pycache__" not in str(p):
+                    if p.is_file() and not any(part.startswith(".") for part in p.parts) and "__pycache__" not in str(p) and "node_modules" not in str(p):
                         files.append(str(p.relative_to(base)))
                 result = {"files": files}
+
+        elif name == "search_files":
+            import subprocess
+            from config import settings as app_settings
+            base = Path(app_settings.aios_repo_dir).resolve()
+            query = inputs.get("query", "")
+            subdir = inputs.get("subdir", "").lstrip("/")
+            search_root = (base / subdir).resolve() if subdir else base
+            if not str(search_root).startswith(str(base)):
+                result = {"error": "Access denied"}
+            else:
+                # Use grep for content search
+                try:
+                    out = subprocess.run(
+                        ["grep", "-rn", "--include=*.py", "--include=*.tsx", "--include=*.ts",
+                         "--include=*.md", "--include=*.yml", "--include=*.yaml",
+                         "-l", query, str(search_root)],
+                        capture_output=True, text=True, timeout=15,
+                    )
+                    matching_files = [
+                        str(Path(f).relative_to(base))
+                        for f in out.stdout.strip().splitlines() if f
+                    ]
+                    # Also get line-level matches (max 30 lines)
+                    out2 = subprocess.run(
+                        ["grep", "-rn", "--include=*.py", "--include=*.tsx", "--include=*.ts",
+                         "--include=*.md", "--include=*.yml", "--include=*.yaml",
+                         query, str(search_root)],
+                        capture_output=True, text=True, timeout=15,
+                    )
+                    raw_matches = out2.stdout.strip().splitlines()[:30]
+                    matches = [
+                        m.replace(str(search_root) + "/", "", 1).replace(str(base) + "/", "", 1)
+                        for m in raw_matches
+                    ]
+                    result = {"files": matching_files, "matches": matches, "total_matches": len(out2.stdout.strip().splitlines())}
+                except subprocess.TimeoutExpired:
+                    result = {"error": "Search timed out"}
             return json.dumps(result)
 
         elif name == "add_outreach_contact":
