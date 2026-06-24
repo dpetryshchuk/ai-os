@@ -225,6 +225,75 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_code_file",
+            "description": "Read a source file from the AI OS codebase. Use this to understand your own implementation, check how tools work, or read configuration.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path from aios/ dir, e.g. 'agent.py', 'routers/jobsearch.py', 'prompts/ima.md'",
+                    },
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "edit_code_file",
+            "description": "Make a surgical edit to a source file by replacing an exact string. Use read_code_file first to see the current content. Only edit files you understand.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Relative path from aios/"},
+                    "old_string": {"type": "string", "description": "The exact string to replace (must be unique in the file)"},
+                    "new_string": {"type": "string", "description": "The replacement string"},
+                },
+                "required": ["path", "old_string", "new_string"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "git_commit_and_push",
+            "description": "Commit staged changes and push to the remote. Only use after making intentional code edits. Always describe what was changed and why.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "description": "Commit message describing what changed and why"},
+                    "files": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of relative paths (from aios/) to stage. If empty, stages all modified tracked files.",
+                    },
+                },
+                "required": ["message"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_code_files",
+            "description": "List files in the AI OS codebase (aios/ directory). Use to explore what files exist before reading them.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "subdir": {
+                        "type": "string",
+                        "description": "Subdirectory to list, e.g. 'routers', 'workers', 'prompts'. Defaults to root aios/.",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 
@@ -383,6 +452,103 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             except Exception as e:
                 essays = [{"error": str(e)}]
             return json.dumps(essays)
+
+        elif name == "read_code_file":
+            from pathlib import Path
+            rel_path = args.get("path", "").lstrip("/")
+            base = Path(__file__).parent
+            target = (base / rel_path).resolve()
+            if not str(target).startswith(str(base.resolve())):
+                result = {"error": "Access denied: path outside aios/"}
+            elif not target.exists():
+                result = {"error": f"File not found: {rel_path}"}
+            else:
+                content = target.read_text()
+                result = {"path": rel_path, "content": content, "lines": len(content.splitlines())}
+            return json.dumps(result)
+
+        elif name == "edit_code_file":
+            from pathlib import Path
+            rel_path = args.get("path", "").lstrip("/")
+            base = Path(__file__).parent
+            target = (base / rel_path).resolve()
+            if not str(target).startswith(str(base.resolve())):
+                result = {"error": "Access denied: path outside aios/"}
+            elif not target.exists():
+                result = {"error": f"File not found: {rel_path}"}
+            else:
+                old_str = args.get("old_string", "")
+                new_str = args.get("new_string", "")
+                content = target.read_text()
+                count = content.count(old_str)
+                if count == 0:
+                    result = {"error": "old_string not found in file"}
+                elif count > 1:
+                    result = {"error": f"old_string appears {count} times — be more specific"}
+                else:
+                    target.write_text(content.replace(old_str, new_str, 1))
+                    result = {"ok": True, "path": rel_path, "message": "Edit applied"}
+            return json.dumps(result)
+
+        elif name == "git_commit_and_push":
+            import subprocess
+            from pathlib import Path
+            from config import settings as app_settings
+
+            repo_root = Path(__file__).parent.parent  # one level up from aios/
+            msg = args.get("message", "agent edit")
+            files = args.get("files", [])
+
+            env = {
+                **__import__("os").environ,
+                "GIT_AUTHOR_NAME": app_settings.git_author_name,
+                "GIT_AUTHOR_EMAIL": app_settings.git_author_email,
+                "GIT_COMMITTER_NAME": app_settings.git_author_name,
+                "GIT_COMMITTER_EMAIL": app_settings.git_author_email,
+            }
+
+            try:
+                if files:
+                    aios_dir = Path(__file__).parent
+                    for f in files:
+                        rel = aios_dir / f.lstrip("/")
+                        subprocess.run(["git", "add", str(rel)], cwd=repo_root, check=True, env=env)
+                else:
+                    subprocess.run(["git", "add", "-u"], cwd=repo_root, check=True, env=env)
+
+                status = subprocess.run(["git", "status", "--porcelain"], cwd=repo_root, capture_output=True, text=True, env=env)
+                if not status.stdout.strip():
+                    result = {"ok": False, "message": "Nothing to commit"}
+                else:
+                    subprocess.run(["git", "commit", "-m", msg], cwd=repo_root, check=True, env=env)
+                    push_result = subprocess.run(
+                        ["git", "push", "private", "master"],
+                        cwd=repo_root, capture_output=True, text=True, env=env,
+                    )
+                    if push_result.returncode != 0:
+                        result = {"ok": False, "error": push_result.stderr}
+                    else:
+                        result = {"ok": True, "message": f"Committed and pushed: {msg}"}
+            except subprocess.CalledProcessError as e:
+                result = {"error": str(e)}
+            return json.dumps(result)
+
+        elif name == "list_code_files":
+            from pathlib import Path
+            base = Path(__file__).parent
+            subdir = args.get("subdir", "").lstrip("/")
+            target = (base / subdir).resolve() if subdir else base.resolve()
+            if not str(target).startswith(str(base.resolve())):
+                result = {"error": "Access denied"}
+            elif not target.exists():
+                result = {"error": f"Directory not found: {subdir}"}
+            else:
+                files = []
+                for p in sorted(target.rglob("*")):
+                    if p.is_file() and not any(part.startswith(".") for part in p.parts) and "__pycache__" not in str(p):
+                        files.append(str(p.relative_to(base)))
+                result = {"files": files}
+            return json.dumps(result)
 
         else:
             return json.dumps({"error": f"Unknown tool: {name}"})

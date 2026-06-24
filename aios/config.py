@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
+    git_author_name: str = "Dima"
+    git_author_email: str = "dmytrodim@gmail.com"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
