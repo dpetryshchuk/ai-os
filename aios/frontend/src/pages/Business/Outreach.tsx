@@ -1,19 +1,34 @@
-import { useEffect, useState, useCallback } from 'react'
-import { Plus, Clock, X, Check, ExternalLink } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+import { ChevronRight, Mic, MicOff, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-interface Contact {
+const STREAM_URL = '/api/jobsearch/agents/stream'
+
+const THINKING = [
+  'Cogitating...', 'Ruminating...', 'Scheming...', 'Noodling...',
+  'Percolating...', 'Concocting...', 'Finagling...', 'Wrangling...',
+  'Deliberating...', 'Marinating...', 'Stewing...', 'Palavering...',
+]
+
+function randomThinking(): string {
+  return THINKING[Math.floor(Math.random() * THINKING.length)]
+}
+
+interface ToolCallData {
+  toolCallId: string
+  toolName: string
+  args: unknown
+  result?: unknown
+}
+
+interface Message {
   id: string
-  name: string
-  company: string
-  linkedin_url: string
-  message_sent: string
-  status: string
-  notes: string
-  created_at: string
-  updated_at: string
+  role: 'user' | 'agent' | 'system'
+  text: string
+  thinking?: boolean
+  toolCalls?: ToolCallData[]
 }
 
 interface Stats {
@@ -21,349 +36,319 @@ interface Stats {
   connected: number
   replied: number
   converted: number
-  ignored: number
   today: number
-  hours_today: number
 }
 
-interface RetroWeek {
-  week: string
-  total_sent: number
-  connected: number
-  replied: number
-  converted: number
-}
-
-const STATUSES = ['sent', 'connected', 'replied', 'converted', 'ignored'] as const
-type Status = typeof STATUSES[number]
-
-function statusBadge(status: string) {
-  const base = 'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium'
-  switch (status) {
-    case 'sent':      return cn(base, 'bg-muted text-muted-foreground')
-    case 'connected': return cn(base, 'bg-blue-500/20 text-blue-400')
-    case 'replied':   return cn(base, 'bg-amber-500/20 text-amber-400')
-    case 'converted': return cn(base, 'bg-green-500/20 text-green-400')
-    case 'ignored':   return cn(base, 'bg-red-500/20 text-red-400')
-    default:          return cn(base, 'bg-muted text-muted-foreground')
-  }
-}
-
-function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+function ToolCallCard({ call }: { call: ToolCallData }) {
+  const [open, setOpen] = useState(false)
   return (
-    <div className="rounded-xl border border-border p-5">
-      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mb-1">{label}</p>
-      <p className="text-2xl font-bold tracking-tight">{value}</p>
-      {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+    <div className="rounded-md border border-border text-xs overflow-hidden">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-left hover:bg-muted/50 transition-colors"
+      >
+        <ChevronRight size={10} className={cn('text-muted-foreground transition-transform shrink-0', open && 'rotate-90')} />
+        <span className="font-mono text-[10px] font-medium text-muted-foreground tracking-wide">{call.toolName}</span>
+      </button>
+      {open && (
+        <div className="border-t border-border p-2.5 flex flex-col gap-2 bg-muted/20">
+          <div>
+            <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground mb-1">Args</p>
+            <pre className="font-mono text-[10px] text-foreground/70 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(call.args, null, 2)}</pre>
+          </div>
+          <div>
+            <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground mb-1">Result</p>
+            <pre className="font-mono text-[10px] text-foreground/70 overflow-x-auto whitespace-pre-wrap">
+              {call.result !== undefined ? JSON.stringify(call.result, null, 2) : '—'}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-const EMPTY_CONTACT = {
-  name: '', company: '', linkedin_url: '', message_sent: '', status: 'sent', notes: '',
+function MessageBubble({ msg }: { msg: Message }) {
+  if (msg.role === 'system') {
+    return <div className="flex justify-center"><p className="text-xs text-muted-foreground py-1">{msg.text}</p></div>
+  }
+  if (msg.role === 'user') {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[680px] w-full flex flex-col items-end gap-1">
+          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground px-1">You</p>
+          <div className="bg-muted rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap">{msg.text}</div>
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[680px] w-full flex flex-col items-start gap-1">
+        <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground px-1">Ima</p>
+        <div className="rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm leading-relaxed border border-border bg-card w-full">
+          {msg.thinking ? (
+            <span className="text-muted-foreground text-sm animate-pulse">{msg.text || 'Thinking...'}</span>
+          ) : (
+            <>
+              <div
+                className="prose prose-sm prose-neutral max-w-none"
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(msg.text) as string) }}
+              />
+              {msg.toolCalls && msg.toolCalls.length > 0 && (
+                <div className="mt-2 flex flex-col gap-1.5">
+                  {msg.toolCalls.map(c => <ToolCallCard key={c.toolCallId} call={c} />)}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function Outreach() {
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState('')
+  const [streaming, setStreaming] = useState(false)
   const [stats, setStats] = useState<Stats | null>(null)
-  const [contacts, setContacts] = useState<Contact[]>([])
-  const [retro, setRetro] = useState<RetroWeek[]>([])
-  const [loading, setLoading] = useState(true)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const activeThinkingRef = useRef(0)
+  const historyRef = useRef<{ role: string; content: string }[]>([])
 
-  const [showContactForm, setShowContactForm] = useState(false)
-  const [contactForm, setContactForm] = useState(EMPTY_CONTACT)
-  const [savingContact, setSavingContact] = useState(false)
+  const [listening, setListening] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
 
-  const [showHoursForm, setShowHoursForm] = useState(false)
-  const [hoursForm, setHoursForm] = useState({ date: new Date().toISOString().slice(0, 10), hours: '', notes: '' })
-  const [savingHours, setSavingHours] = useState(false)
+  useEffect(() => {
+    fetch('/api/outreach/stats')
+      .then(r => r.json())
+      .then(d => setStats(d.stats ?? null))
+      .catch(() => null)
+  }, [messages]) // refresh stats after each exchange
 
-  // inline status update per contact
-  const [updatingId, setUpdatingId] = useState<string | null>(null)
+  function _webSpeechFallback() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SpeechRec = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
+    if (!SpeechRec) { alert('Microphone not available'); return }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec: any = new SpeechRec()
+    rec.continuous = false; rec.interimResults = false; rec.lang = 'en-US'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => { setInput(prev => prev ? prev + ' ' + e.results[0][0].transcript : e.results[0][0].transcript); setListening(false) }
+    rec.onerror = () => setListening(false)
+    rec.onend = () => setListening(false)
+    rec.start()
+    recognitionRef.current = rec
+    setListening(true)
+  }
 
-  const load = useCallback(() => {
-    setLoading(true)
-    Promise.all([
-      fetch('/api/outreach/stats').then(r => r.json()),
-      fetch('/api/outreach/contacts').then(r => r.json()),
-      fetch('/api/outreach/retro?weeks=6').then(r => r.json()),
-    ]).then(([s, c, rv]) => {
-      setStats(s.stats ?? null)
-      setContacts(c.contacts ?? [])
-      setRetro(rv.weeks ?? [])
-    }).finally(() => setLoading(false))
+  const toggleVoice = useCallback(() => {
+    if (listening) {
+      mediaRecorderRef.current?.stop()
+      setListening(false)
+      return
+    }
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      const recorder = new MediaRecorder(stream)
+      const chunks: BlobPart[] = []
+
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data) }
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        setListening(false)
+        const blob = new Blob(chunks, { type: 'audio/webm' })
+        const form = new FormData()
+        form.append('file', blob, 'voice.webm')
+        try {
+          const res = await fetch('/api/transcribe', { method: 'POST', body: form })
+          const data = await res.json()
+          if (data.transcript) setInput(prev => prev ? prev + ' ' + data.transcript : data.transcript)
+        } catch {
+          // server whisper unavailable — fall back to Web Speech API
+          _webSpeechFallback()
+        }
+      }
+
+      recorder.start()
+      mediaRecorderRef.current = recorder
+      setListening(true)
+
+      // Auto-stop after 30s
+      setTimeout(() => recorder.state === 'recording' && recorder.stop(), 30000)
+    }).catch(() => _webSpeechFallback())
+  }, [listening])
+
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  function adjustHeight(): void {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px'
+  }
+
+  const updateMessage = useCallback((id: string, updater: (m: Message) => Message) => {
+    setMessages(prev => prev.map(m => m.id === id ? updater(m) : m))
   }, [])
 
-  useEffect(load, [load])
-
-  const handleAddContact = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSavingContact(true)
+  const send = useCallback(async () => {
+    const text = input.trim()
+    if (!text || streaming) return
+    const userId = `u${Date.now()}`
+    const agentId = `a${Date.now()}`
+    setMessages(prev => [
+      ...prev,
+      { id: userId, role: 'user', text },
+      { id: agentId, role: 'agent', text: randomThinking(), thinking: true, toolCalls: [] },
+    ])
+    setInput('')
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
+    setStreaming(true)
+    const thinkingInterval = setInterval(() => {
+      activeThinkingRef.current = (activeThinkingRef.current + 1) % THINKING.length
+      updateMessage(agentId, m => m.thinking ? { ...m, text: THINKING[activeThinkingRef.current] } : m)
+    }, 600)
+    historyRef.current = [...historyRef.current, { role: 'user', content: text }]
     try {
-      await fetch('/api/outreach/contacts', {
+      const res = await fetch(STREAM_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(contactForm),
+        body: JSON.stringify({ messages: historyRef.current }),
       })
-      setContactForm(EMPTY_CONTACT)
-      setShowContactForm(false)
-      load()
+      clearInterval(thinkingInterval)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      let textContent = ''
+      let buffer = ''
+      let textStarted = false
+      const toolCallMap: Record<string, ToolCallData> = {}
+      const reader = res.body!.getReader()
+      const decoder = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const parts = buffer.split('\n\n')
+        buffer = parts.pop() ?? ''
+        for (const part of parts) {
+          const line = part.trim()
+          if (!line.startsWith('data: ')) continue
+          const trimmed = line.slice(6).trim()
+          if (!trimmed || trimmed === '[DONE]') continue
+          let chunk: { type?: string; payload?: Record<string, unknown> }
+          try { chunk = JSON.parse(trimmed) } catch { continue }
+          if (chunk.type === 'text-delta' && chunk.payload?.text) {
+            textContent += chunk.payload.text as string
+            if (!textStarted) { textStarted = true; updateMessage(agentId, m => ({ ...m, text: textContent, thinking: false })) }
+            else updateMessage(agentId, m => ({ ...m, text: textContent }))
+          } else if (chunk.type === 'tool-call' && chunk.payload) {
+            const { toolCallId, toolName, args } = chunk.payload as unknown as ToolCallData
+            toolCallMap[toolCallId] = { toolCallId, toolName, args, result: undefined }
+            updateMessage(agentId, m => ({ ...m, toolCalls: Object.values(toolCallMap) }))
+          } else if (chunk.type === 'tool-result' && chunk.payload) {
+            const { toolCallId, result } = chunk.payload as { toolCallId: string; result: unknown }
+            if (toolCallMap[toolCallId]) {
+              toolCallMap[toolCallId] = { ...toolCallMap[toolCallId], result }
+              updateMessage(agentId, m => ({ ...m, toolCalls: Object.values(toolCallMap) }))
+            }
+          } else if (chunk.type === 'error' && chunk.payload?.message) {
+            updateMessage(agentId, m => ({ ...m, text: `Error: ${chunk.payload!.message}`, thinking: false }))
+          }
+        }
+      }
+      updateMessage(agentId, m => m.thinking ? { ...m, text: textContent, thinking: false } : m)
+      if (textContent) historyRef.current = [...historyRef.current, { role: 'assistant', content: textContent }]
+    } catch (err) {
+      clearInterval(thinkingInterval)
+      historyRef.current = historyRef.current.slice(0, -1)
+      const msg = err instanceof Error ? err.message : 'Unknown error'
+      updateMessage(agentId, m => ({ ...m, text: `Error: ${msg}`, thinking: false }))
     } finally {
-      setSavingContact(false)
+      setStreaming(false)
     }
-  }
+  }, [input, streaming, updateMessage])
 
-  const handleLogHours = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSavingHours(true)
-    try {
-      await fetch('/api/outreach/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: hoursForm.date, hours: parseFloat(hoursForm.hours) || 0, notes: hoursForm.notes }),
-      })
-      setHoursForm({ date: new Date().toISOString().slice(0, 10), hours: '', notes: '' })
-      setShowHoursForm(false)
-      load()
-    } finally {
-      setSavingHours(false)
-    }
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+    if (e.altKey && (e.key === 'm' || e.key === 'M')) { e.preventDefault(); toggleVoice() }
   }
-
-  const handleStatusChange = async (contact: Contact, newStatus: string) => {
-    setUpdatingId(contact.id)
-    try {
-      await fetch(`/api/outreach/contacts/${contact.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: contact.name,
-          company: contact.company,
-          linkedin_url: contact.linkedin_url,
-          message_sent: contact.message_sent,
-          status: newStatus,
-          notes: contact.notes,
-        }),
-      })
-      load()
-    } finally {
-      setUpdatingId(null)
-    }
-  }
-
-  const setC = (k: keyof typeof EMPTY_CONTACT, v: string) =>
-    setContactForm(f => ({ ...f, [k]: v }))
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8">
-      <div className="mb-6 flex items-start justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Outreach</h1>
-          <p className="text-sm text-muted-foreground mt-1">LinkedIn CRM · sent → connected → replied → converted</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => { setShowHoursForm(h => !h); setShowContactForm(false) }}>
-            <Clock className="size-3.5" /> Log hours
-          </Button>
-          <Button onClick={() => { setShowContactForm(c => !c); setShowHoursForm(false) }}>
-            <Plus className="size-3.5" /> Log contact
-          </Button>
-        </div>
-      </div>
-
-      {/* Stats */}
+    <div className="flex flex-col h-full">
+      {/* Compact stats strip */}
       {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
-          <StatCard label="Today" value={stats.today} sub="contacts sent" />
-          <StatCard label="Converted" value={stats.converted} sub={`${stats.replied} replied`} />
-          <StatCard label="Hours today" value={stats.hours_today} sub="logged" />
-          <StatCard
-            label="Pipeline"
-            value={stats.sent + stats.connected + stats.replied}
-            sub={`${stats.connected} connected`}
-          />
+        <div className="shrink-0 border-b border-border px-6 py-2 flex gap-6 text-xs text-muted-foreground bg-background/80">
+          <span>Today <strong className="text-foreground">{stats.today}</strong></span>
+          <span>Connected <strong className="text-blue-400">{stats.connected}</strong></span>
+          <span>Replied <strong className="text-amber-400">{stats.replied}</strong></span>
+          <span>Converted <strong className="text-green-400">{stats.converted}</strong></span>
+          <span>Pipeline <strong className="text-foreground">{stats.sent + stats.connected + stats.replied}</strong></span>
         </div>
       )}
 
-      {/* Log Contact Form */}
-      {showContactForm && (
-        <div className="rounded-xl border border-border bg-muted/30 p-5 mb-6 flex flex-col gap-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">New Contact</p>
-          <form onSubmit={handleAddContact} className="flex flex-col gap-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Name *</label>
-                <Input value={contactForm.name} onChange={e => setC('name', e.target.value)} placeholder="Jane Smith" required />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Company</label>
-                <Input value={contactForm.company} onChange={e => setC('company', e.target.value)} placeholder="Acme Corp" />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">LinkedIn URL</label>
-              <Input value={contactForm.linkedin_url} onChange={e => setC('linkedin_url', e.target.value)} placeholder="https://linkedin.com/in/..." />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Message sent</label>
-              <textarea
-                value={contactForm.message_sent}
-                onChange={e => setC('message_sent', e.target.value)}
-                placeholder="Paste the message you sent…"
-                rows={3}
-                className="w-full rounded-lg border border-border bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring resize-none transition-colors"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Status</label>
-                <select
-                  value={contactForm.status}
-                  onChange={e => setC('status', e.target.value)}
-                  className="rounded-lg border border-border bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring transition-colors"
-                >
-                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Notes</label>
-                <Input value={contactForm.notes} onChange={e => setC('notes', e.target.value)} placeholder="Any context…" />
-              </div>
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button type="button" variant="outline" onClick={() => setShowContactForm(false)}>
-                <X className="size-3.5" /> Cancel
-              </Button>
-              <Button type="submit" disabled={savingContact || !contactForm.name}>
-                <Check className="size-3.5" /> {savingContact ? 'Saving…' : 'Save'}
-              </Button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Log Hours Form */}
-      {showHoursForm && (
-        <div className="rounded-xl border border-border bg-muted/30 p-5 mb-6 flex flex-col gap-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Log Session Hours</p>
-          <form onSubmit={handleLogHours} className="flex flex-col gap-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Date</label>
-                <Input type="date" value={hoursForm.date} onChange={e => setHoursForm(f => ({ ...f, date: e.target.value }))} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hours</label>
-                <Input type="number" step="0.25" min="0" value={hoursForm.hours} onChange={e => setHoursForm(f => ({ ...f, hours: e.target.value }))} placeholder="1.5" />
-              </div>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Notes</label>
-              <Input value={hoursForm.notes} onChange={e => setHoursForm(f => ({ ...f, notes: e.target.value }))} placeholder="What you worked on…" />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button type="button" variant="outline" onClick={() => setShowHoursForm(false)}>
-                <X className="size-3.5" /> Cancel
-              </Button>
-              <Button type="submit" disabled={savingHours || !hoursForm.hours}>
-                <Check className="size-3.5" /> {savingHours ? 'Saving…' : 'Save'}
-              </Button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Contacts Table */}
-      <div className="mb-8">
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Contacts</p>
-        {loading ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">Loading…</p>
-        ) : contacts.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">No contacts yet. Log your first one above.</p>
-        ) : (
-          <div className="flex flex-col gap-1">
-            <div className="grid grid-cols-[1fr_1fr_auto_auto] gap-x-4 px-4 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <span>Name</span>
-              <span>Company</span>
-              <span>Status</span>
-              <span />
-            </div>
-            {contacts.map(c => (
-              <div
-                key={c.id}
-                className="grid grid-cols-[1fr_1fr_auto_auto] gap-x-4 items-center px-4 py-3 rounded-lg border border-border bg-card text-sm"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{c.name}</p>
-                  {c.notes && <p className="text-xs text-muted-foreground truncate">{c.notes}</p>}
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-muted-foreground">{c.company || '—'}</p>
-                  {c.message_sent && (
-                    <p className="text-xs text-muted-foreground truncate max-w-[180px]" title={c.message_sent}>
-                      {c.message_sent.slice(0, 60)}{c.message_sent.length > 60 ? '…' : ''}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={statusBadge(c.status)}>{c.status}</span>
-                  <select
-                    value={c.status}
-                    disabled={updatingId === c.id}
-                    onChange={e => handleStatusChange(c, e.target.value)}
-                    className="text-xs rounded border border-border bg-transparent px-1.5 py-0.5 outline-none focus-visible:border-ring transition-colors text-muted-foreground disabled:opacity-50"
-                  >
-                    {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div className="flex items-center gap-1">
-                  {c.linkedin_url && (
-                    <a
-                      href={c.linkedin_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                      title="Open LinkedIn"
-                    >
-                      <ExternalLink className="size-3.5" />
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
+      {messages.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 px-4 text-center">
+          <div className="size-10 rounded-full bg-foreground/10 flex items-center justify-center">
+            <div className="size-3 rounded-full bg-foreground/60" />
           </div>
-        )}
+          <div>
+            <p className="text-xl font-semibold tracking-tight">LinkedIn Outreach</p>
+            <p className="text-sm text-muted-foreground mt-1">Log contacts, update statuses, check your funnel — just tell Ima.</p>
+          </div>
+          <div className="flex flex-col gap-2 text-xs text-muted-foreground max-w-sm">
+            <p className="italic">"I just messaged Sarah Chen at Stripe about a contract role"</p>
+            <p className="italic">"Mark John Davis as connected, he replied"</p>
+            <p className="italic">"How's my outreach looking this week?"</p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto px-4 py-6">
+          <div className="max-w-[680px] mx-auto flex flex-col gap-4">
+            {messages.map(msg => <MessageBubble key={msg.id} msg={msg} />)}
+            <div ref={messagesEndRef} />
+          </div>
+        </div>
+      )}
+
+      <div className="border-t border-border bg-background px-4 py-3 shrink-0">
+        <div className="max-w-[680px] mx-auto">
+          <div className="flex gap-2 items-end">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={e => { setInput(e.target.value); adjustHeight() }}
+              onKeyDown={handleKeyDown}
+              placeholder="Tell Ima about your outreach..."
+              rows={1}
+              className="flex-1 resize-none rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 transition-all min-h-[48px] max-h-[200px]"
+            />
+            <button
+              onClick={toggleVoice}
+              className={cn(
+                'shrink-0 rounded-lg p-2 transition-colors',
+                listening ? 'bg-destructive text-destructive-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+              )}
+              title="Voice input (Alt+M)"
+              type="button"
+            >
+              {listening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+            </button>
+            <button
+              onClick={send}
+              disabled={streaming || !input.trim()}
+              className="shrink-0 flex items-center justify-center size-10 rounded-xl bg-foreground text-background disabled:opacity-40 hover:opacity-80 transition-opacity"
+            >
+              <Send size={16} />
+            </button>
+          </div>
+          <p className="mt-2 px-1 text-[10px] text-muted-foreground font-mono">Enter to send · Shift+Enter for newline</p>
+        </div>
       </div>
-
-      {/* Weekly Retro */}
-      {retro.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Weekly Retro</p>
-          <div className="rounded-xl border border-border overflow-hidden">
-            <div className="grid grid-cols-5 bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              <span>Week</span>
-              <span className="text-right">Sent</span>
-              <span className="text-right">Connected</span>
-              <span className="text-right">Replied</span>
-              <span className="text-right">Converted</span>
-            </div>
-            {retro.map((w, i) => (
-              <div
-                key={w.week}
-                className={cn(
-                  'grid grid-cols-5 px-4 py-3 text-sm',
-                  i > 0 ? 'border-t border-border' : '',
-                )}
-              >
-                <span className="font-medium tabular-nums">{w.week}</span>
-                <span className="text-right tabular-nums text-muted-foreground">{w.total_sent}</span>
-                <span className="text-right tabular-nums text-blue-400">{w.connected}</span>
-                <span className="text-right tabular-nums text-amber-400">{w.replied}</span>
-                <span className="text-right tabular-nums text-green-400">{w.converted}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

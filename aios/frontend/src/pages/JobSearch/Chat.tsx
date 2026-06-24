@@ -114,34 +114,60 @@ export default function Chat() {
   const [listening, setListening] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
 
-  const toggleVoice = useCallback(() => {
+  function _webSpeechFallback() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SpeechRec = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
-    if (!SpeechRec) { alert('Speech recognition not supported in this browser.'); return }
-
-    if (listening) {
-      recognitionRef.current?.stop()
-      setListening(false)
-      return
-    }
-
+    if (!SpeechRec) { alert('Microphone not available'); return }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const rec: any = new SpeechRec()
-    rec.continuous = false
-    rec.interimResults = false
-    rec.lang = 'en-US'
+    rec.continuous = false; rec.interimResults = false; rec.lang = 'en-US'
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onresult = (e: any) => {
-      const transcript = e.results[0][0].transcript
-      setInput(prev => (prev ? prev + ' ' + transcript : transcript))
-      setListening(false)
-    }
+    rec.onresult = (e: any) => { setInput(prev => prev ? prev + ' ' + e.results[0][0].transcript : e.results[0][0].transcript); setListening(false) }
     rec.onerror = () => setListening(false)
     rec.onend = () => setListening(false)
     rec.start()
     recognitionRef.current = rec
     setListening(true)
+  }
+
+  const toggleVoice = useCallback(() => {
+    if (listening) {
+      mediaRecorderRef.current?.stop()
+      setListening(false)
+      return
+    }
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      const recorder = new MediaRecorder(stream)
+      const chunks: BlobPart[] = []
+
+      recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data) }
+
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        setListening(false)
+        const blob = new Blob(chunks, { type: 'audio/webm' })
+        const form = new FormData()
+        form.append('file', blob, 'voice.webm')
+        try {
+          const res = await fetch('/api/transcribe', { method: 'POST', body: form })
+          const data = await res.json()
+          if (data.transcript) setInput(prev => prev ? prev + ' ' + data.transcript : data.transcript)
+        } catch {
+          // server whisper unavailable — fall back to Web Speech API
+          _webSpeechFallback()
+        }
+      }
+
+      recorder.start()
+      mediaRecorderRef.current = recorder
+      setListening(true)
+
+      // Auto-stop after 30s
+      setTimeout(() => recorder.state === 'recording' && recorder.stop(), 30000)
+    }).catch(() => _webSpeechFallback())
   }, [listening])
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])

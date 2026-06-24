@@ -7,12 +7,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+import litellm
+
 import db
-from routers import daily_log, home, ideas, jobsearch, look, webhooks, writing, proposals, revenue, outreach
+from config import settings
+from routers import daily_log, home, ideas, jobsearch, look, webhooks, writing, proposals, revenue, outreach, transcribe
+
+
+def _configure_litellm() -> None:
+    # Wire Langfuse observability when keys are present.
+    # LiteLLM reads LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY from env automatically.
+    if settings.langfuse_public_key and settings.langfuse_secret_key:
+        litellm.success_callback = ["langfuse"]
+        litellm.failure_callback = ["langfuse"]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _configure_litellm()
     await db.init_jobsearch_pool()
     await db.init_daily_log_pool()
     yield
@@ -47,6 +59,7 @@ app.include_router(webhooks.router, prefix="/webhooks")
 app.include_router(proposals.router, prefix="/api/proposals")
 app.include_router(revenue.router, prefix="/api/revenue")
 app.include_router(outreach.router, prefix="/api/outreach")
+app.include_router(transcribe.router, prefix="/api/transcribe")
 
 
 @app.get("/api/health")
