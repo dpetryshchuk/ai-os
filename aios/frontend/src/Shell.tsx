@@ -589,8 +589,8 @@ export default function Shell() {
             : 'bg-background text-foreground hover:bg-muted',
         )}
       >
-        <div className={cn('size-2 rounded-full', imaOpen ? 'bg-background' : 'bg-green-400')} />
-        <span>Talk to Ima</span>
+        <div className={cn('size-2 rounded-full transition-all', imaOpen ? 'bg-background' : 'bg-green-400 animate-pulse')} />
+        <span className="font-serif italic text-sm tracking-wide">Talk to Ima</span>
       </button>
 
       {/* Sidebar + content row */}

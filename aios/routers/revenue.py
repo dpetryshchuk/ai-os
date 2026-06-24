@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-import okf_db
+from services import okf_db
 
 router = APIRouter()
 

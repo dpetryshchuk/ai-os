@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-import okf_db
+from services import okf_db
 from tasks import celery_app, generate_proposal
 
 router = APIRouter()

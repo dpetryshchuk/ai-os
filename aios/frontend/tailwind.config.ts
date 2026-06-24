@@ -8,6 +8,7 @@ export default {
       fontFamily: {
         sans: ['GeistVariable', 'system-ui', 'sans-serif'],
         mono: ['GeistMonoVariable', 'monospace'],
+        serif: ['Instrument Serif', 'Georgia', 'serif'],
       },
       colors: {
         background: 'hsl(var(--background))',

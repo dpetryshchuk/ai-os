@@ -4,6 +4,61 @@ import DOMPurify from 'dompurify'
 import { ChevronRight, Mic, MicOff, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+// ── Retro tab ─────────────────────────────────────────────────────────────────
+
+interface RetroWeek {
+  week: string
+  total_sent: number
+  connected: number
+  replied: number
+  converted: number
+}
+
+function RetroView() {
+  const [weeks, setWeeks] = useState<RetroWeek[]>([])
+
+  useEffect(() => {
+    fetch('/api/outreach/retro?weeks=12')
+      .then(r => r.json())
+      .then(d => setWeeks(d.weeks ?? []))
+      .catch(() => null)
+  }, [])
+
+  if (weeks.length === 0) {
+    return <p className="text-sm text-muted-foreground">No retro data yet.</p>
+  }
+
+  return (
+    <div className="flex flex-col gap-4 max-w-2xl">
+      <h2 className="text-sm font-semibold tracking-tight">Weekly Retro</h2>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left">
+              <th className="pb-2 pr-6 font-medium text-muted-foreground">Week</th>
+              <th className="pb-2 pr-6 font-medium text-muted-foreground text-right">Sent</th>
+              <th className="pb-2 pr-6 font-medium text-blue-400 text-right">Connected</th>
+              <th className="pb-2 pr-6 font-medium text-amber-400 text-right">Replied</th>
+              <th className="pb-2 font-medium text-green-400 text-right">Converted</th>
+            </tr>
+          </thead>
+          <tbody>
+            {weeks.map(w => (
+              <tr key={w.week} className="border-b border-border/50">
+                <td className="py-2 pr-6 font-mono text-xs text-muted-foreground">{w.week}</td>
+                <td className="py-2 pr-6 text-right">{w.total_sent}</td>
+                <td className="py-2 pr-6 text-right text-blue-400">{w.connected}</td>
+                <td className="py-2 pr-6 text-right text-amber-400">{w.replied}</td>
+                <td className="py-2 text-right text-green-400">{w.converted}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 const STREAM_URL = '/api/jobsearch/agents/stream'
 
 const THINKING = [
@@ -109,6 +164,7 @@ function MessageBubble({ msg }: { msg: Message }) {
 }
 
 export default function Outreach() {
+  const [tab, setTab] = useState<'chat' | 'retro'>('chat')
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -280,6 +336,34 @@ export default function Outreach() {
 
   return (
     <div className="flex flex-col h-full">
+      {/* Tab bar */}
+      <div className="shrink-0 border-b border-border flex">
+        {(['chat', 'retro'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={cn(
+              'px-4 py-2 text-sm font-medium capitalize transition-colors border-b-2 -mb-px',
+              tab === t
+                ? 'border-foreground text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {/* Retro tab */}
+      {tab === 'retro' && (
+        <div className="flex-1 overflow-y-auto px-6 py-6">
+          <RetroView />
+        </div>
+      )}
+
+      {/* Chat tab */}
+      {tab === 'chat' && <>
+
       {/* Compact stats strip */}
       {stats && (
         <div className="shrink-0 border-b border-border px-6 py-2 flex gap-6 text-xs text-muted-foreground bg-background/80">
@@ -299,11 +383,6 @@ export default function Outreach() {
           <div>
             <p className="text-xl font-semibold tracking-tight">LinkedIn Outreach</p>
             <p className="text-sm text-muted-foreground mt-1">Log contacts, update statuses, check your funnel — just tell Ima.</p>
-          </div>
-          <div className="flex flex-col gap-2 text-xs text-muted-foreground max-w-sm">
-            <p className="italic">"I just messaged Sarah Chen at Stripe about a contract role"</p>
-            <p className="italic">"Mark John Davis as connected, he replied"</p>
-            <p className="italic">"How's my outreach looking this week?"</p>
           </div>
         </div>
       ) : (
@@ -349,6 +428,7 @@ export default function Outreach() {
           <p className="mt-2 px-1 text-[10px] text-muted-foreground font-mono">Enter to send · Shift+Enter for newline</p>
         </div>
       </div>
+      </>}
     </div>
   )
 }

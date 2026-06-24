@@ -28,7 +28,7 @@ export default function App() {
           <Route path="events" element={<EventsPage />} />
           <Route path="ideas" element={<Ideas />} />
           <Route path="jobsearch" element={<JobSearchLayout />}>
-            <Route index element={<Navigate to="chat" replace />} />
+            <Route index element={<Navigate to="pipeline" replace />} />
             <Route path="chat" element={<Chat />} />
             <Route path="pipeline" element={<Pipeline />} />
             <Route path="leads" element={<Leads />} />

@@ -89,8 +89,8 @@ def run_scheduled(event_type: str) -> None:
 import json as _json
 from pathlib import Path as _Path
 import litellm as _litellm
-import okf_db as _okf_db
-import pandadoc as _pandadoc
+from services import okf_db as _okf_db
+from services import pandadoc as _pandadoc
 
 
 def _load_proposal_prompts() -> dict:

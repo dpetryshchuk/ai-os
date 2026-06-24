@@ -706,7 +706,7 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             return json.dumps(result)
 
         elif name == "add_outreach_contact":
-            import okf_db
+            from services import okf_db
             okf_db.init()
             contact = okf_db.create_outreach_contact({
                 "name": inputs["name"],
@@ -719,7 +719,7 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             return json.dumps({"ok": True, "contact": contact})
 
         elif name == "update_outreach_contact":
-            import okf_db
+            from services import okf_db
             okf_db.init()
             row = okf_db.list_outreach_contacts(limit=200)
             match = next((c for c in row if c["id"] == inputs["contact_id"]), None)
@@ -736,7 +736,7 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             return json.dumps({"ok": True, "contact": updated})
 
         elif name == "list_outreach_contacts":
-            import okf_db
+            from services import okf_db
             okf_db.init()
             contacts = okf_db.list_outreach_contacts(
                 limit=inputs.get("limit", 30),
@@ -745,12 +745,12 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             return json.dumps(contacts, default=str)
 
         elif name == "get_outreach_stats":
-            import okf_db
+            from services import okf_db
             okf_db.init()
             return json.dumps(okf_db.get_outreach_stats())
 
         elif name == "log_outreach_hours":
-            import okf_db
+            from services import okf_db
             from datetime import date as _date
             okf_db.init()
             day = inputs.get("date") or str(_date.today())
@@ -758,7 +758,7 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             return json.dumps({"ok": True, "session": session})
 
         elif name == "get_outreach_retro":
-            import okf_db
+            from services import okf_db
             okf_db.init()
             return json.dumps(okf_db.get_weekly_retro(inputs.get("weeks", 4)), default=str)
 

@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY aios/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY aios/main.py aios/config.py aios/db.py aios/schemas.py aios/models.py aios/events.py aios/agent.py aios/tasks.py aios/okf_db.py aios/pandadoc.py ./
+COPY aios/main.py aios/config.py aios/db.py aios/schemas.py aios/models.py aios/events.py aios/agent.py aios/tasks.py ./
 COPY aios/prompts ./prompts
 COPY aios/routers ./routers
 COPY aios/services ./services
