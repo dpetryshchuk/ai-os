@@ -17,7 +17,6 @@ celery_app.conf.timezone = "UTC"
 
 def _import_handlers() -> dict[str, Callable]:
     from workers.scrapers.fathom import run as fathom_run
-    from workers.scrapers.whisper_transcribe import run as whisper_run
     from workers.scrapers.supadata_transcript import run as supadata_run
     from workers.scrapers.local_events import run as events_run
     from workers.scrapers.jobspy_scraper import run as sd_run
@@ -26,7 +25,6 @@ def _import_handlers() -> dict[str, Callable]:
 
     return {
         "fathom.received": fathom_run,
-        "whisper.transcribe": whisper_run,
         "supadata.transcript": supadata_run,
         "local_events.pull": events_run,
         "scrape.sd": sd_run,
