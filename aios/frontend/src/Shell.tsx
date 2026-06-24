@@ -222,12 +222,16 @@ interface ImaToolCall {
   result?: unknown
 }
 
+type ImaPart =
+  | { type: 'text'; content: string }
+  | { type: 'tool'; call: ImaToolCall }
+
 interface ImaMsg {
   id: string
   role: 'user' | 'agent'
-  text: string
+  text: string        // used for: user content, thinking text
   thinking?: boolean
-  toolCalls?: ImaToolCall[]
+  parts?: ImaPart[]  // agent messages: ordered text + tool interleaved
 }
 
 function ImaToolCallCard({ call }: { call: ImaToolCall }) {
@@ -268,16 +272,23 @@ function ImaMsgBubble({ msg }: { msg: ImaMsg }) {
       <div className="max-w-[85%] rounded-2xl rounded-tl-sm px-3 py-2 text-sm leading-relaxed border border-border bg-card">
         {msg.thinking ? (
           <span className="text-muted-foreground animate-pulse text-xs">{msg.text}</span>
+        ) : msg.parts && msg.parts.length > 0 ? (
+          msg.parts.map((p, i) =>
+            p.type === 'text' ? (
+              <div
+                key={i}
+                className="prose prose-sm prose-neutral max-w-none"
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(p.content) as string) }}
+              />
+            ) : (
+              <ImaToolCallCard key={p.call.toolCallId} call={p.call} />
+            )
+          )
         ) : (
-          <>
-            <div
-              className="prose prose-sm prose-neutral max-w-none"
-              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(msg.text) as string) }}
-            />
-            {msg.toolCalls && msg.toolCalls.length > 0 && msg.toolCalls.map(c => (
-              <ImaToolCallCard key={c.toolCallId} call={c} />
-            ))}
-          </>
+          <div
+            className="prose prose-sm prose-neutral max-w-none"
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(msg.text) as string) }}
+          />
         )}
       </div>
     </div>
@@ -354,6 +365,8 @@ function ImaPanel({
     }, 700)
     historyRef.current = [...historyRef.current, { role: 'user', content: text }]
     const toolCallMap: Record<string, ImaToolCall> = {}
+    // partsArr is built in order: text segments and tool calls interleaved
+    const partsArr: ImaPart[] = []
     try {
       const res = await fetch(IMA_STREAM_URL, {
         method: 'POST',
@@ -368,8 +381,8 @@ function ImaPanel({
         const { done, value } = await reader.read()
         if (done) break
         buffer += dec.decode(value, { stream: true })
-        const parts = buffer.split('\n\n'); buffer = parts.pop() ?? ''
-        for (const part of parts) {
+        const sseChunks = buffer.split('\n\n'); buffer = sseChunks.pop() ?? ''
+        for (const part of sseChunks) {
           const line = part.trim()
           if (!line.startsWith('data: ')) continue
           const t = line.slice(6).trim()
@@ -377,23 +390,35 @@ function ImaPanel({
           let chunk: { type?: string; payload?: Record<string, unknown> }
           try { chunk = JSON.parse(t) } catch { continue }
           if (chunk.type === 'text-delta' && chunk.payload?.text) {
-            textContent += chunk.payload.text as string
-            if (!started) { started = true; updateMsg(aid, m => ({ ...m, text: textContent, thinking: false })) }
-            else updateMsg(aid, m => ({ ...m, text: textContent }))
+            const delta = chunk.payload.text as string
+            textContent += delta
+            // Append to last text part or create new one
+            const last = partsArr[partsArr.length - 1]
+            if (last?.type === 'text') {
+              last.content += delta
+            } else {
+              partsArr.push({ type: 'text', content: delta })
+            }
+            if (!started) { started = true; updateMsg(aid, m => ({ ...m, thinking: false, parts: [...partsArr] })) }
+            else updateMsg(aid, m => ({ ...m, parts: [...partsArr] }))
           } else if (chunk.type === 'tool-call' && chunk.payload) {
             const { toolCallId, toolName, args } = chunk.payload as unknown as ImaToolCall
-            toolCallMap[toolCallId] = { toolCallId, toolName, args }
-            updateMsg(aid, m => ({ ...m, toolCalls: Object.values(toolCallMap) }))
+            const call: ImaToolCall = { toolCallId, toolName, args }
+            toolCallMap[toolCallId] = call
+            partsArr.push({ type: 'tool', call })
+            updateMsg(aid, m => ({ ...m, parts: [...partsArr] }))
           } else if (chunk.type === 'tool-result' && chunk.payload) {
             const { toolCallId, result } = chunk.payload as { toolCallId: string; result: unknown }
             if (toolCallMap[toolCallId]) {
               toolCallMap[toolCallId] = { ...toolCallMap[toolCallId], result }
-              updateMsg(aid, m => ({ ...m, toolCalls: Object.values(toolCallMap) }))
+              const idx = partsArr.findIndex(p => p.type === 'tool' && p.call.toolCallId === toolCallId)
+              if (idx !== -1) partsArr[idx] = { type: 'tool', call: toolCallMap[toolCallId] }
+              updateMsg(aid, m => ({ ...m, parts: [...partsArr] }))
             }
           }
         }
       }
-      updateMsg(aid, m => m.thinking ? { ...m, text: textContent || '...', thinking: false } : m)
+      updateMsg(aid, m => m.thinking ? { ...m, text: textContent || '...', thinking: false, parts: partsArr.length ? [...partsArr] : undefined } : m)
       if (textContent) {
         historyRef.current = [...historyRef.current, { role: 'assistant', content: textContent }]
         exchangeCountRef.current += 1
@@ -459,6 +484,7 @@ function ImaPanel({
           id: `loaded-${i}`,
           role: m.role === 'user' ? 'user' : 'agent',
           text: m.content,
+          parts: m.role !== 'user' ? [{ type: 'text' as const, content: m.content }] : undefined,
         }))
         setMessages(displayMsgs)
         setShowHistory(false)
