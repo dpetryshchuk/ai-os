@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 import litellm
 import db
 from config import settings
-from routers import daily_log, home, ideas, jobsearch, look, webhooks, writing, proposals, revenue, outreach, transcribe, sessions
+from routers import daily_log, home, ideas, jobsearch, look, webhooks, writing, proposals, revenue, outreach, transcribe, sessions, vault
 
 
 def _configure_litellm() -> None:
@@ -57,6 +57,7 @@ app.include_router(revenue.router, prefix="/api/revenue")
 app.include_router(outreach.router, prefix="/api/outreach")
 app.include_router(transcribe.router, prefix="/api/transcribe")
 app.include_router(sessions.router)
+app.include_router(vault.router, prefix="/api/vault")
 
 
 @app.get("/api/health")

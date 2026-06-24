@@ -67,6 +67,7 @@ const WORKFLOWS: WorkflowSection[] = [
   },
   { label: 'Daily Log', path: '/daily-log', icon: CalendarDays },
   { label: 'Look', path: '/look', icon: Sparkles },
+  { label: 'Knowledge', path: '/vault', icon: BookOpen },
 ]
 
 const BUSINESS: WorkflowSection[] = [

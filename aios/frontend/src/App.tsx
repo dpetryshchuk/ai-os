@@ -14,6 +14,7 @@ import Freewrite from './pages/Writing/Freewrite'
 import DailyLog from './pages/DailyLog'
 import Ideas from './pages/Ideas'
 import Look from './pages/Look'
+import Vault from './pages/Vault'
 import Proposals from './pages/Business/Proposals'
 import Revenue from './pages/Business/Revenue'
 import Outreach from './pages/Business/Outreach'
@@ -42,6 +43,7 @@ export default function App() {
           </Route>
           <Route path="daily-log" element={<DailyLog />} />
           <Route path="look" element={<Look />} />
+          <Route path="vault" element={<Vault />} />
           <Route path="proposals" element={<Proposals />} />
           <Route path="revenue" element={<Revenue />} />
           <Route path="outreach" element={<Outreach />} />
