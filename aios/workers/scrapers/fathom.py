@@ -110,6 +110,14 @@ fathom_url: {url}
     with open(filepath, "w") as f:
         f.write(note)
 
+    # ── Embed into vector search ──
+    try:
+        from tasks import embed_document
+        rel_path = f"Meetings/{filename}"
+        embed_document.delay("vault", rel_path, note)
+    except Exception:
+        pass
+
     return {
         "saved_to": filepath,
         "meeting_title": meeting_title,
