@@ -1,65 +1,17 @@
 import json
 import os
 import secrets
+from pathlib import Path
 from typing import AsyncIterator
 
 import asyncpg
 import litellm
 
-INSTRUCTIONS = """You are Jobby, the user's job-search CRM assistant.
+_PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-Your job is to capture complete, accurate information before writing to the
-database. Do NOT call write tools (upsert_*, log_*, update_*) until you have
-every required field — and ideally the useful optional ones too.
 
-How to operate:
-
-1. ONE QUESTION AT A TIME.
-   When the user mentions an event ("emailed someone", "got a reply",
-   "applied somewhere", "had a call", "saw a posting"), drive a short
-   interview. Ask one focused question per turn until you have everything.
-   Prefer multiple-choice / short options. Example:
-     "Got a reply from who?
-      (a) name them
-      (b) you don't remember yet — let's check the recent outreach list"
-
-2. SEARCH BEFORE INSERT.
-   Before creating any contact, company, or posting, use query_db or
-   search_notes to check for an existing record. Never create duplicates —
-   if a near-match exists, surface it and ask the user to confirm.
-
-3. RESTATE BEFORE WRITING.
-   Right before any write tool, summarize the action in one short line and
-   wait for explicit confirmation, unless the user already gave it. Example:
-     "About to log: outbound email to Jane Doe at Acme (CTO, source LinkedIn),
-      stage Outreached. Confirm?"
-
-4. DON'T FABRICATE.
-   If you don't know a field (role, company website, source, link), ASK.
-   Empty is better than wrong. Never guess emails, URLs, or names.
-
-5. STAGE TRANSITIONS: Outreached → Responded → Ongoing → Dead.
-   "They replied" → find the contact via query_db, then propose moving them
-   to Responded and confirm.
-   "They went silent" / "no longer interested" → propose Dead and confirm.
-
-6. LEAD STATUS: new → applied / dropped.
-   When the user wants to dismiss a lead ("not interested", "skip that one"),
-   use update_lead_status with status='dropped' — DO NOT delete. Dropped
-   leads are excluded from re-scrapes, so this is how we prune.
-
-7. SCRAPER TUNING.
-   When the user wants to change what gets scraped ("stop showing me senior
-   roles", "add staff engineer to the skip list", "look for ML engineer too"):
-   a) call get_scraper_settings(source='jobspy_sd')
-   b) propose the exact edit (which array, what to add/remove)
-   c) confirm with the user
-   d) call update_scraper_settings with the FULL new config
-
-8. KEEP PROSE SHORT.
-   One question per turn. No long explanations unless asked. After each
-   write, give a one-line confirmation and stop.
-"""
+def _load_instructions() -> str:
+    return (_PROMPTS_DIR / "ima.md").read_text()
 
 TOOLS = [
     {
@@ -245,6 +197,34 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_notes",
+            "description": "Read all personal notes from the job search notes section. Returns recent notes to give Ima context about the user's job search thoughts.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Max notes to return, default 20"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_essays",
+            "description": "Read essay titles and content from the user's writing section. Use this to understand who the user is, their background, and their thoughts.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Max essays to return, default 5"},
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 
@@ -380,6 +360,30 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             )
             return json.dumps({"ok": True, "source": source, "config": merged})
 
+        elif name == "read_notes":
+            limit = inputs.get("limit", 20)
+            rows = await pool.fetch(
+                "SELECT content, created_at FROM notes ORDER BY created_at DESC LIMIT $1",
+                limit,
+            )
+            result = [{"content": r["content"], "date": str(r["created_at"])} for r in rows]
+            return json.dumps(result, default=str)
+
+        elif name == "read_essays":
+            limit = inputs.get("limit", 5)
+            from config import settings
+            essays = []
+            try:
+                writing_dir = settings.writing_dir
+                for fname in sorted(os.listdir(writing_dir))[-limit:]:
+                    if fname.endswith(".md"):
+                        fpath = os.path.join(writing_dir, fname)
+                        content = open(fpath).read()[:3000]  # first 3000 chars
+                        essays.append({"filename": fname, "preview": content})
+            except Exception as e:
+                essays = [{"error": str(e)}]
+            return json.dumps(essays)
+
         else:
             return json.dumps({"error": f"Unknown tool: {name}"})
 
@@ -388,7 +392,7 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
 
 
 async def agentic_stream(messages: list, pool: asyncpg.Pool) -> AsyncIterator[str]:
-    current_messages = [{"role": "system", "content": INSTRUCTIONS}] + list(messages)
+    current_messages = [{"role": "system", "content": _load_instructions()}] + list(messages)
 
     try:
         while True:

@@ -32,7 +32,7 @@ DEFAULT_CONFIG = {
     "skip_titles": [
         "intern", "internship", "co-op", "principal ", "staff ",
         "vp of", "vice president", "director of", "head of engineering",
-        "data collection", "content creator", "short-form",
+        "data collection", "content creator", "short-form", "embedded",
     ],
     "results_wanted": 30,
     "hours_old": 25,
