@@ -1,931 +1,1010 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI OS -- Architecture Reference</title>
-  <style>
-    /* ---- Reset + Base ---- */
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI OS — Architecture</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      font-size: 15px;
-      line-height: 1.7;
-      color: #1a1a1a;
-      background: #fafafa;
-    }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* ---- Layout ---- */
-    .page {
-      max-width: 900px;
-      margin: 0 auto;
-      padding: 48px 32px 80px;
-      background: #fff;
-      border-left: 1px solid #e8e8e8;
-      border-right: 1px solid #e8e8e8;
-      min-height: 100vh;
-    }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.7;
+  }
 
-    /* ---- Typography ---- */
-    h1 {
-      font-size: 2rem;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      margin-bottom: 6px;
-      color: #111;
-    }
-    h2 {
-      font-size: 1.35rem;
-      font-weight: 700;
-      margin-top: 56px;
-      margin-bottom: 16px;
-      padding-bottom: 8px;
-      border-bottom: 2px solid #e8e8e8;
-      color: #111;
-    }
-    h3 {
-      font-size: 1.05rem;
-      font-weight: 600;
-      margin-top: 28px;
-      margin-bottom: 10px;
-      color: #222;
-    }
-    p { margin-bottom: 14px; }
-    ul, ol { margin-left: 24px; margin-bottom: 14px; }
-    li { margin-bottom: 4px; }
-    a { color: #2563eb; text-decoration: none; }
-    a:hover { text-decoration: underline; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
 
-    /* ---- Header ---- */
-    .header-meta {
-      font-size: 0.85rem;
-      color: #666;
-      margin-bottom: 32px;
-      padding-bottom: 20px;
-      border-bottom: 1px solid #e8e8e8;
-    }
-    .header-meta strong { color: #333; }
+  .layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    min-height: 100vh;
+  }
 
-    /* ---- Nav ---- */
-    nav {
-      background: #f6f7f8;
-      border: 1px solid #e4e4e4;
-      border-radius: 8px;
-      padding: 20px 24px;
-      margin-bottom: 40px;
-    }
-    nav h3 {
-      margin-top: 0;
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #888;
-      margin-bottom: 12px;
-    }
-    nav ol {
-      margin-left: 18px;
-      column-count: 2;
-      column-gap: 32px;
-    }
-    nav li { margin-bottom: 6px; font-size: 0.9rem; }
-    @media (max-width: 600px) { nav ol { column-count: 1; } }
+  nav {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 24px 0;
+  }
 
-    /* ---- Code ---- */
-    code {
-      font-family: "SF Mono", "Cascadia Code", "Fira Code", Consolas, "Courier New", monospace;
-      font-size: 0.82em;
-      background: #f3f4f6;
-      color: #c7254e;
-      padding: 1px 5px;
-      border-radius: 3px;
-    }
-    pre {
-      background: #f6f7f8;
-      border: 1px solid #e4e4e4;
-      border-radius: 6px;
-      padding: 18px 20px;
-      overflow-x: auto;
-      margin: 16px 0;
-      font-size: 0.83rem;
-      line-height: 1.55;
-    }
-    pre code {
-      background: none;
-      color: #1a1a1a;
-      padding: 0;
-      font-size: inherit;
-    }
+  nav .logo {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
 
-    /* ---- Tables ---- */
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 16px 0 20px;
-      font-size: 0.9rem;
-    }
-    th {
-      background: #f3f4f6;
-      text-align: left;
-      padding: 9px 12px;
-      font-weight: 600;
-      border: 1px solid #e4e4e4;
-      color: #333;
-    }
-    td {
-      padding: 8px 12px;
-      border: 1px solid #e8e8e8;
-      vertical-align: top;
-    }
-    tr:nth-child(even) td { background: #fafafa; }
+  nav .logo h1 {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
 
-    /* ---- Diagram box ---- */
-    .diagram {
-      background: #f6f7f8;
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 24px;
-      overflow-x: auto;
-      margin: 20px 0;
-    }
-    .diagram pre {
-      background: none;
-      border: none;
-      padding: 0;
-      margin: 0;
-      font-size: 0.82rem;
-    }
+  nav .logo p {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
 
-    /* ---- Callout ---- */
-    .callout {
-      background: #eff6ff;
-      border-left: 4px solid #2563eb;
-      border-radius: 0 6px 6px 0;
-      padding: 14px 18px;
-      margin: 16px 0;
-      font-size: 0.9rem;
-    }
-    .callout strong { color: #1e40af; }
+  nav ul { list-style: none; padding: 0 8px; }
+  nav ul li a {
+    display: block;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    transition: all 0.1s;
+  }
+  nav ul li a:hover, nav ul li a.active {
+    background: var(--surface2);
+    color: var(--text);
+    text-decoration: none;
+  }
 
-    /* ---- Event flow ---- */
-    .flow-step {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 8px;
-      align-items: flex-start;
-    }
-    .flow-num {
-      background: #2563eb;
-      color: #fff;
-      border-radius: 50%;
-      width: 22px;
-      height: 22px;
-      font-size: 0.75rem;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      margin-top: 2px;
-    }
+  nav .section-label {
+    padding: 12px 20px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
 
-    /* ---- Print ---- */
-    @media print {
-      body { background: #fff; font-size: 12px; }
-      .page { border: none; padding: 20px; max-width: 100%; }
-      nav { break-inside: avoid; }
-      h2 { break-before: auto; }
-      pre, .diagram { break-inside: avoid; }
-    }
-  </style>
+  main {
+    padding: 48px 64px;
+    max-width: 960px;
+  }
+
+  h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
+  h2 { font-size: 22px; font-weight: 600; margin: 48px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 17px; font-weight: 600; margin: 28px 0 10px; color: var(--accent); }
+  h4 { font-size: 14px; font-weight: 600; margin: 18px 0 6px; color: var(--orange); }
+  p { margin-bottom: 14px; color: #cdd9e5; }
+
+  code {
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    color: var(--orange);
+  }
+
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    overflow-x: auto;
+    margin: 16px 0;
+    position: relative;
+  }
+
+  pre code {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .label {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+
+  .callout {
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 18px 0;
+    border-left: 3px solid;
+  }
+  .callout.info { background: rgba(88,166,255,.07); border-color: var(--accent); }
+  .callout.warn { background: rgba(210,153,34,.07); border-color: var(--yellow); }
+  .callout.good { background: rgba(63,185,80,.07); border-color: var(--green); }
+  .callout p { margin: 0; font-size: 14px; }
+  .callout strong { color: var(--text); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 13px;
+  }
+  th {
+    text-align: left;
+    padding: 8px 12px;
+    background: var(--surface);
+    border-bottom: 2px solid var(--border);
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:hover td { background: var(--surface); }
+  td code { background: none; border: none; padding: 0; color: var(--orange); }
+  td:last-child { color: var(--muted); }
+
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin: 20px 0;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.8;
+    color: #cdd9e5;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  .dim { color: var(--muted); }
+  .hi { color: var(--accent); }
+  .hi2 { color: var(--green); }
+  .hi3 { color: var(--orange); }
+  .hi4 { color: var(--purple); }
+
+  .tool-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .tool-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .tool-card h4 { margin: 0 0 4px; color: var(--accent); font-size: 13px; }
+  .tool-card p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+  ul.bullets { margin: 8px 0 14px 20px; }
+  ul.bullets li { margin-bottom: 5px; color: #cdd9e5; font-size: 14px; }
+
+  .hero-sub { color: var(--muted); font-size: 16px; margin-bottom: 32px; }
+  section { margin-bottom: 20px; }
+</style>
 </head>
 <body>
-<div class="page">
 
-  <!-- HEADER -->
-  <h1>AI OS -- Architecture Reference</h1>
-  <div class="header-meta">
-    <strong>Repository:</strong> dpetryshchuk/ai-os &nbsp;|&nbsp;
-    <strong>VPS:</strong> Hetzner CX22 @ 46.225.78.10 &nbsp;|&nbsp;
-    <strong>Primary domain:</strong> home.dmytropetryshchuk.com &nbsp;|&nbsp;
-    <strong>Business domain:</strong> os.onekeyflow.com &nbsp;|&nbsp;
-    <strong>Prepared:</strong> June 2026
+<div class="layout">
+
+<nav>
+  <div class="logo">
+    <h1>AI OS</h1>
+    <p>Architecture Reference</p>
   </div>
-
-  <!-- NAV -->
-  <nav>
-    <h3>Contents</h3>
-    <ol>
-      <li><a href="#overview">System Overview</a></li>
-      <li><a href="#stack">Tech Stack</a></li>
-      <li><a href="#files">File Structure</a></li>
-      <li><a href="#database">Database Architecture</a></li>
-      <li><a href="#agent">The AI Agent (Ima / Jobby)</a></li>
-      <li><a href="#workers">Event/Worker Pattern</a></li>
-      <li><a href="#jobsearch">Job Search Pipeline</a></li>
-      <li><a href="#cicd">CI/CD Pipeline</a></li>
-      <li><a href="#terraform">Infrastructure as Code</a></li>
-      <li><a href="#multitenant">Multi-Tenant Architecture</a></li>
-      <li><a href="#okf">OKF Business Tools</a></li>
-      <li><a href="#langfuse">Langfuse Integration</a></li>
-      <li><a href="#decisions">Design Decisions</a></li>
-    </ol>
-  </nav>
-
-  <!-- 1. SYSTEM OVERVIEW -->
-  <h2 id="overview">1. System Overview</h2>
-  <p>
-    One FastAPI application serves two domains from the same process on port 4116.
-    Caddy sits in front as a TLS-terminating reverse proxy, providing HTTP Basic Auth
-    and auto-managed TLS certificates. Domain differentiation is handled entirely
-    client-side in the React frontend.
-  </p>
-
-  <div class="diagram">
-    <pre>
-  Browser (dmytropetryshchuk.com)            Browser (onekeyflow.com)
-          |                                           |
-          v                                           v
-  +-------------------------------------------------------+
-  |           Caddy (systemd, host-level)                 |
-  |  home.dmytropetryshchuk.com  -->  localhost:4116      |
-  |  os.onekeyflow.com           -->  localhost:4116      |
-  |  sync.dmytropetryshchuk.com  -->  localhost:8384      |
-  |  (old subdomains: 302 redirect to home)               |
-  |  Basic Auth via /home/dima/ai-os/caddy/auth_credentials|
-  +-------------------------------------------------------+
-                         |
-                         | HTTP/1 (flush_interval -1 for SSE)
-                         v
-  +-------------------------------------------------------+
-  |         FastAPI :4116 (uvicorn, Docker)               |
-  |                                                       |
-  |  /api/jobsearch/**    /api/daily-log/**               |
-  |  /api/proposals/**    /api/revenue/**                 |
-  |  /api/writing/**      /api/home/**                    |
-  |  /api/ideas/**        /api/look/**                    |
-  |  /webhooks/**         /api/health                     |
-  |  /* -> React SPA (static files in /public)            |
-  +-------------------------------------------------------+
-       |                  |                  |
-       | asyncpg pool      | asyncpg pool     | Celery tasks
-       v                  v                  v
-  +----------+      +----------+       +-------------+
-  | Postgres |      | Postgres |       |    Redis    |
-  | jobsearch|      | daily_log|       | :6379 (msg) |
-  | :5432    |      | :5432    |       +------+------+
-  +----------+      +----------+              |
-                                    +---------+---------+
-                                    |                   |
-                               celery-worker       celery-beat
-                               (queues: celery,   (cron scheduler)
-                                okf)
-
-
-  Docker Compose bridge network "internal":
-    aios, celery-worker, celery-beat, postgres, redis
-    (only aios exposes 127.0.0.1:4116 to the host)
-
-  SQLite (okf.db):
-    Mounted via Docker volume okf_data into /app/data
-    Used only by OKF business tools (proposals, P&amp;L tracker)
-    </pre>
-  </div>
-
-  <!-- 2. TECH STACK -->
-  <h2 id="stack">2. Tech Stack</h2>
-
-  <h3>Backend</h3>
-  <table>
-    <tr><th>Component</th><th>Technology</th><th>Why</th></tr>
-    <tr><td>Language / runtime</td><td>Python 3.12</td><td>Async support, ecosystem</td></tr>
-    <tr><td>Web framework</td><td>FastAPI + uvicorn</td><td>Async-native, Pydantic, OpenAPI auto-docs</td></tr>
-    <tr><td>Async DB driver</td><td>asyncpg</td><td>Fastest Postgres async driver; used in all routes</td></tr>
-    <tr><td>Sync DB (Celery)</td><td>SQLAlchemy + psycopg2</td><td>Celery workers are sync; SQLAlchemy ORM for OsEvent model</td></tr>
-    <tr><td>Task queue</td><td>Celery 5</td><td>Distributed tasks, retry, monitoring, beat scheduler</td></tr>
-    <tr><td>Message broker</td><td>Redis 7</td><td>Celery broker + result backend</td></tr>
-    <tr><td>LLM client</td><td>LiteLLM</td><td>Provider-agnostic; swap model with one string change</td></tr>
-    <tr><td>LLM model</td><td>DeepSeek Chat (deepseek/deepseek-chat)</td><td>10x cheaper than GPT-4, strong at structured tool calls</td></tr>
-    <tr><td>Settings</td><td>pydantic-settings</td><td>Typed env-var loading with .env fallback</td></tr>
-    <tr><td>Migrations</td><td>Alembic (x2)</td><td>One per DB; separate migration history</td></tr>
-  </table>
-
-  <h3>Frontend</h3>
-  <table>
-    <tr><th>Component</th><th>Technology</th><th>Notes</th></tr>
-    <tr><td>Framework</td><td>React 19</td><td>Latest stable; RSC not used (SPA mode)</td></tr>
-    <tr><td>Build tool</td><td>Vite</td><td>Fast dev HMR; builds to <code>aios/public/</code></td></tr>
-    <tr><td>Language</td><td>TypeScript</td><td>Full-stack types shared via Zod/Pydantic schemas</td></tr>
-    <tr><td>Styling</td><td>Tailwind CSS (class dark mode)</td><td>Dark mode via <code>dark:</code> class prefix, toggled per domain</td></tr>
-    <tr><td>Routing</td><td>React Router v6</td><td>SPA client-side routing; FastAPI catches all unmatched paths</td></tr>
-    <tr><td>Markdown</td><td>react-markdown</td><td>Renders agent streaming output</td></tr>
-  </table>
-
-  <h3>Infrastructure</h3>
-  <table>
-    <tr><th>Component</th><th>Technology</th><th>Notes</th></tr>
-    <tr><td>VPS</td><td>Hetzner CX22 (2 vCPU, 4 GB RAM)</td><td>EUR ~10/month; 5x cheaper than AWS t3.small</td></tr>
-    <tr><td>Reverse proxy / TLS</td><td>Caddy 2 (systemd)</td><td>Auto-TLS via Let's Encrypt; simple config; runs on host</td></tr>
-    <tr><td>Container runtime</td><td>Docker Compose v2</td><td>Five services; internal bridge network</td></tr>
-    <tr><td>CI/CD</td><td>GitHub Actions</td><td>Paths-filtered jobs; build on GHA runners</td></tr>
-    <tr><td>Container registry</td><td>GHCR (ghcr.io)</td><td>Free; integrated with GitHub token auth</td></tr>
-    <tr><td>DNS</td><td>Porkbun (managed via Terraform)</td><td>A records for all subdomains</td></tr>
-    <tr><td>IaC</td><td>Terraform (Hetzner + Porkbun providers)</td><td>VPS, firewall, SSH key, DNS, GH secrets</td></tr>
-  </table>
-
-  <!-- 3. FILE STRUCTURE -->
-  <h2 id="files">3. File Structure</h2>
-  <pre><code>ai-os/
-|-- docker-compose.yml        # Service topology: aios, celery-worker, celery-beat, postgres, redis
-|-- caddy/
-|   `-- Caddyfile             # Reverse proxy: TLS, basic auth, domain routing
-|-- infra/terraform/main.tf   # IaC: Hetzner VPS, firewall, DNS, GH secrets
-|-- postgres/init.sh          # Creates jobsearch + daily_log DBs on first boot
-|-- .github/workflows/
-|   `-- deploy.yml            # CI/CD: paths-filtered deploy-app + deploy-infra jobs
-`-- aios/
-    |-- main.py               # FastAPI app: lifespan, middleware, router mounts, SPA catch-all
-    |-- config.py             # All env vars (pydantic-settings); defaults for local dev
-    |-- db.py                 # asyncpg pools for both DBs + SyncSession for Celery
-    |-- agent.py              # LiteLLM tool-use agentic loop; 11 CRM tools; SSE streaming
-    |-- tasks.py              # Celery app, process_event task, run_scheduled, beat schedule, generate_proposal
-    |-- models.py             # SQLAlchemy OsEvent model (used only by Celery workers)
-    |-- events.py             # create(pool, source, type, payload) -- inserts os_events row
-    |-- schemas.py            # Pydantic request/response models for all routes
-    |-- okf_db.py             # SQLite helper for OKF: monthly_pl + events tables
-    |-- pandadoc.py           # PandaDoc API client: build_payload, create_document, wait_for_draft
-    |-- prompts/
-    |   `-- proposal.json     # Few-shot examples + instruction for proposal LLM call
-    |-- routers/
-    |   |-- jobsearch.py      # All CRM + agent routes (/api/jobsearch/**)
-    |   |-- daily_log.py      # Habit tracker routes (/api/daily-log/**)
-    |   |-- proposals.py      # Proposal generation routes (/api/proposals/**)
-    |   |-- revenue.py        # P&amp;L tracker routes (/api/revenue/**)
-    |   |-- writing.py        # Essay/writing routes (/api/writing/**)
-    |   |-- home.py           # Dashboard / home routes (/api/home/**)
-    |   |-- ideas.py          # Ideas capture (/api/ideas/**)
-    |   |-- look.py           # Look/appearance feature (/api/look/**)
-    |   `-- webhooks.py       # Inbound webhooks (Fathom analytics, etc.)
-    |-- workers/
-    |   |-- health.py         # Health check worker (pings DB, returns status)
-    |   `-- scrapers/
-    |       |-- jobspy_scraper.py   # Indeed + LinkedIn scraper (python-jobspy)
-    |       |-- yc.py               # Y Combinator job board scraper
-    |       |-- hn.py               # Hacker News "Who's Hiring" scraper
-    |       |-- fathom.py           # Fathom Analytics webhook processor
-    |       |-- local_events.py     # Local event calendar scraper
-    |       |-- whisper_transcribe.py  # Local Whisper audio transcription
-    |       |-- supadata_transcript.py # Supadata YouTube transcript fetcher
-    |       `-- utils.py            # ScrapedJob dataclass, sync_jobs_to_db, is_defense filter
-    |-- alembic/              # Migrations for jobsearch DB
-    |-- alembic_daily/        # Migrations for daily_log DB
-    `-- frontend/
-        |-- src/
-        |   |-- main.tsx          # React Router routes + domain detection
-        |   |-- Shell.tsx         # Sidebar nav; add links here for new pages
-        |   `-- pages/            # One folder per feature area
-        `-- package.json          # React 19, Vite, Tailwind, react-router-dom</code></pre>
-
-  <!-- 4. DATABASE ARCHITECTURE -->
-  <h2 id="database">4. Database Architecture</h2>
-
-  <p>
-    The application uses <strong>two separate Postgres 16 databases</strong> (both inside
-    the same Postgres container, initialized by <code>postgres/init.sh</code>) plus one
-    SQLite file for OKF business data.
-  </p>
-
-  <h3>Why two Postgres databases?</h3>
-  <p>
-    The <code>jobsearch</code> and <code>daily_log</code> schemas have completely different
-    concerns and independent migration histories. Keeping them in separate Alembic projects
-    (<code>alembic/</code> vs <code>alembic_daily/</code>) means a migration for the job
-    search CRM cannot accidentally touch the habit tracker, and the connection pools are
-    isolated so a long job-search query cannot starve a quick daily-log write.
-  </p>
-
-  <h3>jobsearch database</h3>
-  <p>Holds all CRM data for the job search feature and the OS event queue.</p>
-  <table>
-    <tr><th>Table</th><th>Purpose</th><th>Key columns</th></tr>
-    <tr>
-      <td><code>companies</code></td>
-      <td>Company registry</td>
-      <td><code>id</code> (hex8), <code>name</code>, <code>website</code></td>
-    </tr>
-    <tr>
-      <td><code>contacts</code></td>
-      <td>People at companies; tracks outreach pipeline</td>
-      <td><code>stage</code> (Outreached / Responded / Ongoing / Dead), <code>source</code></td>
-    </tr>
-    <tr>
-      <td><code>interactions</code></td>
-      <td>Log of emails/calls per contact</td>
-      <td><code>direction</code> (in/out), <code>date</code>, <code>notes</code></td>
-    </tr>
-    <tr>
-      <td><code>job_postings</code></td>
-      <td>Scraped and manually-entered job leads</td>
-      <td><code>status</code> (new / applied / dropped), <code>company_id</code>, <code>title</code></td>
-    </tr>
-    <tr>
-      <td><code>content_posts</code></td>
-      <td>LinkedIn content analytics</td>
-      <td><code>content</code>, <code>impressions</code>, <code>engagements</code>, <code>comments</code></td>
-    </tr>
-    <tr>
-      <td><code>notes</code></td>
-      <td>Free-text notes; full-text search via <code>tsvector</code></td>
-      <td><code>category</code>, <code>title</code>, <code>url</code>, <code>content</code></td>
-    </tr>
-    <tr>
-      <td><code>os_events</code></td>
-      <td>Event queue for all background tasks</td>
-      <td><code>source</code>, <code>type</code>, <code>status</code> (pending/processing/done/failed), <code>payload</code> (jsonb)</td>
-    </tr>
-    <tr>
-      <td><code>scraper_settings</code></td>
-      <td>Per-source scraper config overrides (jsonb)</td>
-      <td><code>source</code> (unique), <code>config</code> (jsonb), <code>updated_at</code></td>
-    </tr>
-  </table>
-
-  <h3>daily_log database</h3>
-  <p>Tracks daily habits and journal entries. Completely separate Alembic project.</p>
-  <table>
-    <tr><th>Table</th><th>Purpose</th></tr>
-    <tr><td><code>habit_types</code></td><td>Habit definitions (name, target, unit)</td></tr>
-    <tr><td><code>entries</code></td><td>Daily journal entries (one per day)</td></tr>
-    <tr><td><code>habit_logs</code></td><td>Individual habit completions per entry</td></tr>
-  </table>
-
-  <h3>okf.db (SQLite)</h3>
-  <p>
-    Stored at <code>/app/data/okf.db</code> inside the Docker volume <code>okf_data</code>.
-    Used exclusively by OKF (OneKeyFlow) business tools. SQLite was chosen because:
-    the data is low-volume, write-rarely/read-often, and requires no concurrent writes.
-    It avoids adding a third Postgres DB just for a few business finance tables.
-  </p>
-  <table>
-    <tr><th>Table</th><th>Purpose</th></tr>
-    <tr><td><code>monthly_pl</code></td><td>Revenue P&amp;L tracker (gross revenue, fees, overhead, tax rate)</td></tr>
-    <tr><td><code>events</code></td><td>OKF-specific event log (proposal generation jobs)</td></tr>
-  </table>
-
-  <!-- 5. THE AI AGENT -->
-  <h2 id="agent">5. The AI Agent (Ima / Jobby)</h2>
-
-  <p>
-    The agent lives in <code>aios/agent.py</code> and is a <strong>streaming tool-use loop</strong>
-    over DeepSeek Chat via LiteLLM. It serves as a conversational CRM assistant that can
-    read and write to the <code>jobsearch</code> database on the user's behalf.
-  </p>
-
-  <h3>Architecture: agentic loop with SSE streaming</h3>
-  <pre><code>POST /api/jobsearch/agents/stream
-  Body: { messages: [{role, content}, ...] }
-  Response: text/event-stream
-
-Loop (in agent.py):
-  1. Call litellm.acompletion(model="deepseek/deepseek-chat", stream=True, tools=TOOLS)
-  2. Stream chunks:
-     - text delta  -> yield SSE: {"type":"text-delta","payload":{"text":"..."}}
-     - tool_calls  -> accumulate by index (streamed in fragments)
-  3. If NO tool calls in response -> yield "data: [DONE]" and return
-  4. If tool calls present:
-     - append assistant message with tool_calls to context
-     - for each tool call:
-         yield SSE: {"type":"tool-call","payload":{toolCallId, toolName, args}}
-         result = await run_tool(name, args, pool)
-         yield SSE: {"type":"tool-result","payload":{toolCallId, result}}
-     - append all tool results to context
-     - loop back to step 1 (next LLM call with updated context)</code></pre>
-
-  <h3>SSE event types the frontend consumes</h3>
-  <table>
-    <tr><th>Event type</th><th>Payload</th><th>Frontend action</th></tr>
-    <tr><td><code>text-delta</code></td><td><code>{text: string}</code></td><td>Append to message buffer, render as Markdown</td></tr>
-    <tr><td><code>tool-call</code></td><td><code>{toolCallId, toolName, args}</code></td><td>Show spinner with tool name</td></tr>
-    <tr><td><code>tool-result</code></td><td><code>{toolCallId, result}</code></td><td>Hide spinner, optionally show result</td></tr>
-    <tr><td><code>error</code></td><td><code>{message: string}</code></td><td>Show error message</td></tr>
-    <tr><td><code>[DONE]</code></td><td>literal string</td><td>Close EventSource, finalize render</td></tr>
-  </table>
-
-  <h3>CRM tools (11 total)</h3>
-  <table>
-    <tr><th>Tool</th><th>What it does</th><th>Write?</th></tr>
-    <tr><td><code>upsert_company</code></td><td>Find or create a company by name (case-insensitive)</td><td>Yes</td></tr>
-    <tr><td><code>upsert_contact</code></td><td>Find or create a contact at a company; defaults stage to Outreached</td><td>Yes</td></tr>
-    <tr><td><code>upsert_job_posting</code></td><td>Find or create a job posting; deduped by (company_id, title)</td><td>Yes</td></tr>
-    <tr><td><code>update_stage</code></td><td>Move a contact through the pipeline (Outreached/Responded/Ongoing/Dead)</td><td>Yes</td></tr>
-    <tr><td><code>log_interaction</code></td><td>Record an email/call (direction: in/out)</td><td>Yes</td></tr>
-    <tr><td><code>log_content_post</code></td><td>Record a LinkedIn post with engagement metrics</td><td>Yes</td></tr>
-    <tr><td><code>update_lead_status</code></td><td>Mark a job posting as new/applied/dropped (soft delete)</td><td>Yes</td></tr>
-    <tr><td><code>query_db</code></td><td>Run any SELECT query; returns JSON array</td><td>No</td></tr>
-    <tr><td><code>search_notes</code></td><td>Full-text search across notes via Postgres tsvector</td><td>No</td></tr>
-    <tr><td><code>get_scraper_settings</code></td><td>Read current scraper config for a source</td><td>No</td></tr>
-    <tr><td><code>update_scraper_settings</code></td><td>Replace scraper config (full object replace, not patch)</td><td>Yes</td></tr>
-  </table>
-
-  <h3>Agent system prompt design</h3>
-  <p>Key behavioral rules baked into the system prompt (<code>INSTRUCTIONS</code> constant):</p>
+  <div class="section-label">Overview</div>
   <ul>
-    <li><strong>One question at a time</strong> -- drives a short interview before writing</li>
-    <li><strong>Search before insert</strong> -- always call <code>query_db</code> or <code>search_notes</code> first to prevent duplicates</li>
-    <li><strong>Restate before write</strong> -- summarizes the action and waits for confirmation</li>
-    <li><strong>No fabrication</strong> -- asks rather than guessing emails, URLs, or names</li>
-    <li><strong>Soft deletes</strong> -- uses <code>status='dropped'</code> not SQL DELETE; dropped leads are excluded from re-scrapes</li>
+    <li><a href="#overview">Big Picture</a></li>
+    <li><a href="#request-lifecycle">Request Lifecycle</a></li>
+    <li><a href="#two-domains">Two Domains</a></li>
   </ul>
-
-  <h3>Why these design choices?</h3>
+  <div class="section-label">Backend</div>
   <ul>
-    <li><strong>DeepSeek over GPT-4:</strong> ~10x cheaper per token; performs comparably on structured JSON tool calls which is 95% of this use case</li>
-    <li><strong>SSE over WebSockets:</strong> simpler server (one-directional streaming); FastAPI <code>StreamingResponse</code> with no extra library; works through Caddy with <code>flush_interval -1</code></li>
-    <li><strong>Tool-use loop over function calling once:</strong> the agent may need to search, then insert, then update in a single user turn -- multiple tool round-trips are required</li>
-    <li><strong>LiteLLM over direct SDK:</strong> provider-agnostic; can switch to Claude or GPT-4 by changing one string in the <code>model=</code> argument</li>
+    <li><a href="#fastapi">FastAPI App</a></li>
+    <li><a href="#database">Database Layer</a></li>
+    <li><a href="#celery">Celery Workers</a></li>
+    <li><a href="#agent">Ima Agent</a></li>
+    <li><a href="#litellm">LiteLLM + Langfuse</a></li>
+    <li><a href="#embeddings">pgvector + RAG</a></li>
+    <li><a href="#routers">Routers</a></li>
   </ul>
-
-  <!-- 6. EVENT/WORKER PATTERN -->
-  <h2 id="workers">6. Event/Worker Pattern</h2>
-
-  <p>
-    All background work -- scraping, health checks, proposal generation, transcription --
-    flows through a single pattern: an <code>os_events</code> row is the unit of work.
-  </p>
-
-  <h3>Event flow</h3>
-  <div class="flow-step"><div class="flow-num">1</div><div>Trigger: UI button OR Celery Beat schedule fires <code>run_scheduled(event_type)</code></div></div>
-  <div class="flow-step"><div class="flow-num">2</div><div><code>os_events</code> row inserted with <code>status='pending'</code>, <code>source='ui'</code> or <code>'schedule'</code></div></div>
-  <div class="flow-step"><div class="flow-num">3</div><div><code>process_event.delay(event_id)</code> enqueues task to Redis</div></div>
-  <div class="flow-step"><div class="flow-num">4</div><div>Celery worker picks it up: sets <code>status='processing'</code>, <code>started_at=now()</code>, commits</div></div>
-  <div class="flow-step"><div class="flow-num">5</div><div>Worker dispatches to handler by <code>event.type</code> (e.g. <code>"scrape.sd"</code> -> <code>jobspy_scraper.run</code>)</div></div>
-  <div class="flow-step"><div class="flow-num">6</div><div>On success: <code>status='done'</code>, result stored in <code>payload.result</code></div></div>
-  <div class="flow-step"><div class="flow-num">7</div><div>On failure: <code>status='failed'</code>, <code>error=str(exc)</code></div></div>
-
-  <h3>Beat schedule</h3>
-  <table>
-    <tr><th>Schedule name</th><th>Cron</th><th>Event type</th></tr>
-    <tr><td>scrape-sd-morning</td><td>8:00 UTC daily</td><td><code>scrape.sd</code> (Indeed + LinkedIn)</td></tr>
-    <tr><td>scrape-sd-evening</td><td>20:00 UTC daily</td><td><code>scrape.sd</code></td></tr>
-    <tr><td>scrape-yc-8am</td><td>8:10 UTC daily</td><td><code>scrape.yc</code> (YC jobs)</td></tr>
-    <tr><td>scrape-hn-8am</td><td>8:15 UTC daily</td><td><code>scrape.hn</code> (HN hiring)</td></tr>
-    <tr><td>health-check-60s</td><td>Every 60 seconds</td><td><code>health.check</code></td></tr>
-  </table>
-
-  <h3>Event handlers registry</h3>
-  <p>
-    Handlers are imported lazily inside <code>_import_handlers()</code> to avoid circular
-    import issues at module load time. The mapping is a simple <code>dict[str, Callable]</code>:
-  </p>
-  <pre><code>"health.check"         -> workers.health.run
-"scrape.sd"            -> workers.scrapers.jobspy_scraper.run
-"scrape.yc"            -> workers.scrapers.yc.run
-"scrape.hn"            -> workers.scrapers.hn.run
-"fathom.received"      -> workers.scrapers.fathom.run
-"whisper.transcribe"   -> workers.scrapers.whisper_transcribe.run
-"supadata.transcript"  -> workers.scrapers.supadata_transcript.run
-"local_events.pull"    -> workers.scrapers.local_events.run</code></pre>
-
-  <h3>Two Celery queues</h3>
-  <p>
-    The worker runs two queues: <code>celery</code> (default, all scraper/health tasks) and
-    <code>okf</code> (proposal generation). Separating them means a long-running proposal
-    LLM call cannot block the job scraper queue.
-  </p>
-
-  <!-- 7. JOB SEARCH PIPELINE -->
-  <h2 id="jobsearch">7. Job Search Pipeline</h2>
-
-  <h3>Scraper architecture (jobspy_scraper.py)</h3>
-  <p>
-    Uses <a href="https://github.com/Bunsly/JobSpy" target="_blank">python-jobspy</a>
-    to query Indeed and LinkedIn simultaneously. The scraper runs a cartesian product
-    of <code>search_terms x locations x sites</code>, so with 5 terms and 3 locations
-    that is 30 API calls per scrape run (15 Indeed + 15 LinkedIn).
-  </p>
-
-  <h3>Deduplication</h3>
+  <div class="section-label">Frontend</div>
   <ul>
-    <li>In-memory dedup within a single scrape run via a <code>set</code> of <code>company::title</code> keys</li>
-    <li>DB-level dedup via <code>upsert_job_posting</code>: inserts only if no row matches <code>(company_id, lower(title))</code></li>
-    <li>Dropped leads (<code>status='dropped'</code>) are preserved in DB but never shown in the leads feed -- the scraper checks for existing rows before inserting so dropped jobs stay dropped across future scrape runs</li>
+    <li><a href="#frontend">React App</a></li>
+    <li><a href="#ima-panel">ImaPanel</a></li>
+    <li><a href="#sse">SSE Streaming</a></li>
   </ul>
-
-  <h3>Filtering layers</h3>
-  <ol>
-    <li><strong>skip_titles:</strong> case-insensitive substring match against a configurable list (intern, director, VP, etc.)</li>
-    <li><strong>is_defense filter:</strong> utility in <code>utils.py</code> -- skips defense/government contractors by company and title keywords</li>
-    <li><strong>area_keywords filter:</strong> the job location string must contain at least one area keyword (San Diego, Carlsbad, remote, etc.)</li>
-  </ol>
-
-  <div class="callout">
-    <strong>Live config tuning:</strong> the scraper reads its config from the
-    <code>scraper_settings</code> table at runtime. The AI agent exposes
-    <code>get_scraper_settings</code> and <code>update_scraper_settings</code> tools,
-    so the user can tell the agent "stop showing me senior roles" and it edits the
-    <code>skip_titles</code> array in the DB -- no code changes, no redeploy.
-  </div>
-
-  <h3>Contact pipeline stages</h3>
-  <pre><code>Job lead discovered (status='new')
-        |
-        v
-  User applies (status='applied') -- or drops (status='dropped')
-        |
-        v
-  Contact created: stage = Outreached
-        |
-        v (they reply)
-  stage = Responded
-        |
-        v (call / interview)
-  stage = Ongoing
-        |
-        v (goes cold / rejected)
-  stage = Dead</code></pre>
-
-  <p>
-    The <strong>retro page</strong> (<code>GET /api/jobsearch/retro</code>) aggregates
-    this funnel data: outreach rate, response rate, avg days to response, contacts
-    needing follow-up (no interaction in 7+ days), and weekly/daily interaction counts.
-  </p>
-
-  <!-- 8. CI/CD -->
-  <h2 id="cicd">8. CI/CD Pipeline</h2>
-
-  <h3>Two jobs, paths-filtered</h3>
-  <p>
-    The <code>.github/workflows/deploy.yml</code> workflow has two independent jobs that only
-    run when relevant files change:
-  </p>
-
-  <table>
-    <tr><th>Job</th><th>Triggers on</th><th>What it does</th></tr>
-    <tr>
-      <td><code>deploy-app</code></td>
-      <td><code>aios/**</code> file changes</td>
-      <td>Build + push Docker image to GHCR, then deploy to VPS</td>
-    </tr>
-    <tr>
-      <td><code>deploy-infra</code></td>
-      <td><code>docker-compose.yml</code> or <code>caddy/**</code> changes</td>
-      <td>SSH to VPS: git pull + compose up + reload Caddy</td>
-    </tr>
-  </table>
-
-  <h3>deploy-app step by step</h3>
-  <div class="flow-step"><div class="flow-num">1</div><div><code>git push master</code> triggers the workflow</div></div>
-  <div class="flow-step"><div class="flow-num">2</div><div><code>dorny/paths-filter</code> checks if any <code>aios/**</code> file changed; skips if not</div></div>
-  <div class="flow-step"><div class="flow-num">3</div><div>Login to GHCR using <code>GITHUB_TOKEN</code> (no separate secret needed)</div></div>
-  <div class="flow-step"><div class="flow-num">4</div><div><code>docker buildx build</code> -- multi-stage: Node 22 alpine builds frontend, Python 3.12-slim runs backend</div></div>
-  <div class="flow-step"><div class="flow-num">5</div><div>Image pushed to <code>ghcr.io/dpetryshchuk/ai-os/aios:latest</code> with GHA layer cache</div></div>
-  <div class="flow-step"><div class="flow-num">6</div><div>SSH to VPS via <code>appleboy/ssh-action</code> using <code>VPS_SSH_KEY</code> secret</div></div>
-  <div class="flow-step"><div class="flow-num">7</div><div><code>git fetch && git reset --hard origin/master</code> (syncs compose file)</div></div>
-  <div class="flow-step"><div class="flow-num">8</div><div><code>docker compose pull aios</code> -- pulls the new image from GHCR</div></div>
-  <div class="flow-step"><div class="flow-num">9</div><div><code>docker compose up -d aios celery-worker celery-beat</code> -- rolling restart of app containers only; postgres and redis are untouched</div></div>
-
-  <h3>Why GHCR?</h3>
+  <div class="section-label">Infrastructure</div>
   <ul>
-    <li>Free for public and private repos under GitHub's included storage</li>
-    <li>Authentication uses the same <code>GITHUB_TOKEN</code> that is automatically injected into every Actions run -- no extra secret to manage for the registry</li>
-    <li>Tight integration: package is linked to the repository in the GitHub UI</li>
+    <li><a href="#docker">Docker + Compose</a></li>
+    <li><a href="#cicd">CI/CD</a></li>
+    <li><a href="#caddy">Caddy Proxy</a></li>
+    <li><a href="#terraform">Terraform</a></li>
   </ul>
-
-  <h3>Why no auto-migration?</h3>
-  <p>
-    Database migrations are a manual step run via <code>docker compose exec aios alembic upgrade head</code>
-    after deploy. This is a deliberate safety gate: an Alembic migration that drops a column or
-    renames a table cannot be rolled back automatically. Running it manually gives one final
-    chance to verify the migration SQL before it runs against production data.
-  </p>
-
-  <!-- 9. TERRAFORM -->
-  <h2 id="terraform">9. Infrastructure as Code (Terraform)</h2>
-
-  <p>
-    <code>infra/terraform/main.tf</code> declares all long-lived infrastructure resources.
-    It uses three providers: <code>hetznercloud/hcloud</code>, <code>porkbun</code>, and
-    <code>integrations/github</code>.
-  </p>
-
-  <h3>Resources managed</h3>
-  <table>
-    <tr><th>Resource</th><th>Type</th><th>Notes</th></tr>
-    <tr><td>VPS</td><td><code>hcloud_server</code></td><td>CX22, ubuntu-24.04, cloud-init bootstraps Docker + Caddy</td></tr>
-    <tr><td>Firewall</td><td><code>hcloud_firewall</code></td><td>Inbound TCP 22, 80, 443 only; all else blocked</td></tr>
-    <tr><td>SSH key</td><td><code>hcloud_ssh_key</code></td><td>Registered with Hetzner for the VPS</td></tr>
-    <tr><td>DNS A records (primary)</td><td><code>porkbun_dns_record</code></td><td><code>for_each</code> over var.primary_subdomains on dmytropetryshchuk.com</td></tr>
-    <tr><td>DNS A records (secondary)</td><td><code>porkbun_dns_record</code></td><td><code>for_each</code> over var.secondary_subdomains on onekeyflow.com</td></tr>
-    <tr><td>GitHub secret: VPS_HOST</td><td><code>github_actions_secret</code></td><td>VPS IPv4 address</td></tr>
-    <tr><td>GitHub secret: VPS_USER</td><td><code>github_actions_secret</code></td><td>Fixed: "dima"</td></tr>
-    <tr><td>GitHub secret: VPS_SSH_KEY</td><td><code>github_actions_secret</code></td><td>SSH private key for deploy user</td></tr>
-  </table>
-
-  <h3>terraform import vs terraform apply</h3>
-  <p>
-    The VPS was provisioned before Terraform was added to the project. Running
-    <code>terraform apply</code> on an already-running server would try to create
-    a <em>second</em> server. The correct workflow is:
-  </p>
-  <pre><code># Import the existing server into Terraform state
-terraform import hcloud_server.vps &lt;server_id&gt;
-terraform import hcloud_firewall.public &lt;firewall_id&gt;
-terraform import hcloud_ssh_key.operator &lt;ssh_key_id&gt;
-
-# After import, plan should show no changes (drift check)
-terraform plan
-
-# Future changes (resize, new DNS record) are applied normally
-terraform apply</code></pre>
-
-  <p>
-    The <code>prevent_destroy = true</code> lifecycle rule on <code>hcloud_server.vps</code>
-    ensures <code>terraform destroy</code> will refuse to delete the VPS without first
-    removing that block from the config.
-  </p>
-
-  <!-- 10. MULTI-TENANT -->
-  <h2 id="multitenant">10. Multi-Tenant Architecture</h2>
-
-  <p>
-    The same single binary serves two distinct audiences on two different domains,
-    with different branding and navigation.
-  </p>
-
-  <h3>How it works</h3>
-  <table>
-    <tr><th></th><th>home.dmytropetryshchuk.com</th><th>os.onekeyflow.com</th></tr>
-    <tr><td><strong>Audience</strong></td><td>Personal (job search, daily log, writing)</td><td>Business (proposals, P&amp;L, client tools)</td></tr>
-    <tr><td><strong>Theme</strong></td><td>Light mode</td><td>Dark mode</td></tr>
-    <tr><td><strong>Nav</strong></td><td>Personal nav items</td><td>Business nav items</td></tr>
-    <tr><td><strong>Detection</strong></td><td colspan="2">Client-side: <code>window.location.hostname</code> in <code>Shell.tsx</code></td></tr>
-    <tr><td><strong>Caddy config</strong></td><td colspan="2">Both domains <code>reverse_proxy localhost:4116</code> -- identical backend</td></tr>
-    <tr><td><strong>Auth</strong></td><td colspan="2">Same HTTP Basic Auth credentials on both domains</td></tr>
-  </table>
-
-  <h3>Why not separate deployments?</h3>
-  <p>
-    One developer, one VPS. A second deployment would require a second port, second
-    Docker service, second set of CI/CD jobs, and second DB connection config -- all
-    for the same codebase. Domain-switching at the frontend layer costs essentially
-    nothing and keeps the operational surface minimal.
-  </p>
-
-  <!-- 11. OKF BUSINESS TOOLS -->
-  <h2 id="okf">11. OKF Business Tools</h2>
-
-  <p>
-    OneKeyFlow (OKF) is the business side of the app. It lives on
-    <code>os.onekeyflow.com</code> and provides two tools: proposal generation and
-    a revenue P&amp;L tracker.
-  </p>
-
-  <h3>Proposal generation pipeline</h3>
-  <div class="flow-step"><div class="flow-num">1</div><div>User fills in a discovery form (client name, business description, problem, solution, tools, timeline, price)</div></div>
-  <div class="flow-step"><div class="flow-num">2</div><div><code>POST /api/proposals/generate</code> enqueues <code>generate_proposal.apply_async(..., queue='okf')</code></div></div>
-  <div class="flow-step"><div class="flow-num">3</div><div>Celery worker (okf queue) calls <code>_call_proposal_llm</code>: DeepSeek with <code>response_format=json_object</code> + few-shot examples from <code>prompts/proposal.json</code></div></div>
-  <div class="flow-step"><div class="flow-num">4</div><div>LLM returns structured JSON: sections, pricing, timeline, scope</div></div>
-  <div class="flow-step"><div class="flow-num">5</div><div><code>pandadoc.build_payload</code> maps the JSON to a PandaDoc API payload</div></div>
-  <div class="flow-step"><div class="flow-num">6</div><div><code>pandadoc.create_document</code> sends to PandaDoc API; returns <code>doc_id</code></div></div>
-  <div class="flow-step"><div class="flow-num">7</div><div><code>pandadoc.wait_for_draft</code> polls the API until document status is <code>draft</code> (ready to review)</div></div>
-  <div class="flow-step"><div class="flow-num">8</div><div>Result stored in <code>okf_db.events</code> table; frontend polls <code>GET /api/proposals/status/{job_id}</code> until done</div></div>
-
-  <h3>Revenue P&amp;L tracker</h3>
-  <p>
-    A simple monthly P&amp;L table stored in SQLite. The <code>_enrich</code> function in
-    <code>okf_db.py</code> computes derived fields at read time (net revenue, operating
-    profit, tax provision, net profit, net margin) rather than storing them, keeping the
-    stored data minimal and the calculations auditable.
-  </p>
-
-  <h3>okf_db.py pattern</h3>
-  <p>
-    A thin module that wraps <code>sqlite3</code> directly -- no ORM. Each function
-    opens and closes its own connection. This is safe because SQLite operations here
-    are always short-lived and never concurrent. The same event lifecycle pattern
-    (create_event / start_event / complete_event / fail_event) mirrors the Postgres
-    <code>os_events</code> pattern used by the main app.
-  </p>
-
-  <!-- 12. LANGFUSE -->
-  <h2 id="langfuse">12. Langfuse Integration</h2>
-
-  <p>
-    <a href="https://langfuse.com" target="_blank">Langfuse</a> is an open-source LLM
-    observability platform. It provides traces, spans, cost tracking, token counts,
-    latency histograms, and user feedback scores -- essentially a "Datadog for LLM calls."
-  </p>
-
-  <h3>Current state</h3>
-  <p>
-    The infrastructure is already wired up: <code>config.py</code> exposes
-    <code>langfuse_public_key</code> and <code>langfuse_secret_key</code> as env vars,
-    and <code>docker-compose.yml</code> passes them into the <code>aios</code> and
-    <code>celery-worker</code> containers. LiteLLM has native Langfuse support --
-    enabling it requires one line of code.
-  </p>
-
-  <h3>To enable (LiteLLM native callback)</h3>
-  <pre><code># In agent.py, after imports:
-import litellm
-litellm.success_callback = ["langfuse"]
-
-# Or set via env var (no code change at all):
-LANGFUSE_PUBLIC_KEY=pk-lf-...
-LANGFUSE_SECRET_KEY=sk-lf-...
-# LiteLLM auto-enables Langfuse when both keys are present</code></pre>
-
-  <h3>Cloud vs self-hosted</h3>
-  <table>
-    <tr><th></th><th>Langfuse Cloud (langfuse.com)</th><th>Self-hosted (Docker)</th></tr>
-    <tr><td><strong>Setup</strong></td><td>Sign up, get keys, set env vars</td><td>Add Langfuse + Postgres service to docker-compose.yml</td></tr>
-    <tr><td><strong>Cost</strong></td><td>Free tier (50k observations/month)</td><td>Extra ~200 MB RAM on VPS; free otherwise</td></tr>
-    <tr><td><strong>Data residency</strong></td><td>Langfuse's servers (EU region available)</td><td>Your VPS</td></tr>
-    <tr><td><strong>Recommendation</strong></td><td>Start here</td><td>Migrate if volume exceeds free tier</td></tr>
-  </table>
-
-  <h3>What you get</h3>
+  <div class="section-label">Data Flows</div>
   <ul>
-    <li>Per-trace cost breakdown (input tokens, output tokens, DeepSeek pricing)</li>
-    <li>Tool call inspection: see exactly which tools the agent called, with args and results</li>
-    <li>Latency per LLM call and per tool execution</li>
-    <li>Session grouping (one conversation = one trace with N spans)</li>
-    <li>Scores: you can attach thumbs-up/down feedback from the UI to traces</li>
+    <li><a href="#webhooks">Webhooks</a></li>
+    <li><a href="#sessions">Chat Sessions</a></li>
+    <li><a href="#vault">Obsidian Vault</a></li>
+    <li><a href="#self-editing">Self-Editing</a></li>
   </ul>
+</nav>
 
-  <!-- 13. DESIGN DECISIONS -->
-  <h2 id="decisions">13. Design Decisions</h2>
+<main>
 
-  <table>
-    <tr><th>Decision</th><th>Choice</th><th>Alternatives considered</th><th>Reason</th></tr>
-    <tr>
-      <td>Web framework</td>
-      <td>FastAPI</td>
-      <td>Django, Flask, Express</td>
-      <td>Async-native (asyncpg works natively); Pydantic validation; auto OpenAPI docs; significantly faster than WSGI frameworks under concurrent load</td>
-    </tr>
-    <tr>
-      <td>Task queue</td>
-      <td>Celery + Redis</td>
-      <td>cron jobs, APScheduler, RQ</td>
-      <td>Celery provides retry logic, task state tracking, and distributed execution; the os_events pattern gives persistent audit trail that cron cannot</td>
-    </tr>
-    <tr>
-      <td>LLM model</td>
-      <td>DeepSeek Chat</td>
-      <td>GPT-4o, Claude Sonnet</td>
-      <td>~10x cheaper per token; benchmarks comparably on structured JSON/tool-call tasks; the primary use case is CRM writes, not open-ended reasoning</td>
-    </tr>
-    <tr>
-      <td>Deployment model</td>
-      <td>Single monolith</td>
-      <td>Microservices, separate services per feature</td>
-      <td>One developer -- complexity of service mesh, inter-service auth, and distributed tracing has no payoff; monolith is simpler to debug, test, and deploy</td>
-    </tr>
-    <tr>
-      <td>Reverse proxy</td>
-      <td>Caddy</td>
-      <td>nginx, Traefik, HAProxy</td>
-      <td>Auto-TLS via ACME with zero config; Caddyfile is 30 lines vs hundreds in nginx; systemd service (not Docker) so it survives Docker restarts</td>
-    </tr>
-    <tr>
-      <td>VPS provider</td>
-      <td>Hetzner CX22</td>
-      <td>AWS, DigitalOcean, Vultr, Fly.io</td>
-      <td>~EUR 10/month for 2 vCPU / 4 GB; equivalent AWS t3.small is ~$25/month; European data centers; excellent network performance</td>
-    </tr>
-    <tr>
-      <td>Async DB driver</td>
-      <td>asyncpg</td>
-      <td>psycopg3 async, SQLAlchemy async</td>
-      <td>asyncpg is the fastest Postgres async driver for Python; direct SQL gives full control and avoids ORM overhead for read-heavy API endpoints</td>
-    </tr>
-    <tr>
-      <td>Streaming protocol</td>
-      <td>Server-Sent Events (SSE)</td>
-      <td>WebSockets, long-polling</td>
-      <td>SSE is unidirectional (server to client) which is all the agent stream needs; simpler than WebSockets (no upgrade handshake, works through HTTP/1.1); native browser EventSource API</td>
-    </tr>
-    <tr>
-      <td>Container registry</td>
-      <td>GHCR</td>
-      <td>Docker Hub, AWS ECR, self-hosted</td>
-      <td>Free for public and private images; authenticates with the auto-injected GITHUB_TOKEN in Actions (no extra secret to manage)</td>
-    </tr>
-    <tr>
-      <td>SQLite for OKF</td>
-      <td>SQLite</td>
-      <td>Third Postgres DB</td>
-      <td>OKF data is low-volume, single-writer, and accessed by one process at a time; SQLite has zero operational overhead and the file is trivially backed up via Docker volume</td>
-    </tr>
-  </table>
+<h1>AI OS Architecture</h1>
+<p class="hero-sub">A personal command center — job search CRM, AI assistant, knowledge base, finances, and business OS — deployed as a single FastAPI monorepo on a $4.50/mo Hetzner VPS.</p>
 
-  <hr style="border:none;border-top:1px solid #e8e8e8;margin:48px 0 24px;" />
-  <p style="font-size:0.82rem;color:#888;text-align:center;">
-    Generated June 2026 -- AI OS architecture reference for interview preparation.
-    Source: <code>dpetryshchuk/ai-os</code>
-  </p>
+<section id="overview">
+<h2>Big Picture</h2>
 
+<p>One Docker image. Two domains. One FastAPI app handling everything from the database to the AI agent to the React SPA.</p>
+
+<div class="diagram"><span class="dim">User's browser</span>
+<span class="dim">      │ HTTPS</span>
+<span class="hi">  Caddy</span> <span class="dim">(reverse proxy, basicauth, TLS — runs as host systemd service)</span>
+<span class="dim">      │</span>
+<span class="hi2">  FastAPI :4116</span>  <span class="dim">← serves both domains from the same port</span>
+<span class="dim">      ├── /api/*       → Python route handlers</span>
+<span class="dim">      ├── /webhooks/*  → Fathom, etc.</span>
+<span class="dim">      └── /*           → React SPA (index.html)</span>
+
+<span class="dim">FastAPI talks to:</span>
+<span class="hi3">  Postgres (pgvector:pg16)</span>  <span class="dim">— two databases: jobsearch + daily_log</span>
+<span class="hi4">  Redis</span>                     <span class="dim">— Celery broker + result backend</span>
+<span class="hi3">  SQLite</span>                    <span class="dim">— okf.db (proposals) + sessions.db (chat history)</span>
+
+<span class="dim">Background tasks:</span>
+<span class="hi2">  celery-worker</span>  <span class="dim">— scrapers, embeddings, proposal generation</span>
+<span class="hi2">  celery-beat</span>    <span class="dim">— cron scheduler (8am scrapes, Sunday backfill)</span>
+
+<span class="dim">External APIs:</span>
+<span class="dim">  DeepSeek  — Ima's LLM (cheap, fast, tool-use capable)</span>
+<span class="dim">  OpenAI    — text-embedding-3-small for semantic search</span>
+<span class="dim">  Langfuse  — LLM observability (trace every Ima conversation)</span>
+<span class="dim">  PandaDoc  — proposal PDF generation</span>
+<span class="dim">  Fathom    — meeting recordings (webhooks → vault notes)</span></div>
+
+<div class="callout info">
+  <p><strong>One repo, two personalities.</strong> <code>home.dmytropetryshchuk.com</code> = personal light theme. <code>onekeyflow.com</code> = agency dark theme. The distinction is made in the browser: <code>IS_OKF = hostname.includes('onekeyflow')</code> applies the <code>dark</code> class to <code>&lt;html&gt;</code>.</p>
 </div>
+</section>
+
+<section id="request-lifecycle">
+<h2>Request Lifecycle</h2>
+
+<p>What happens when a user clicks "Add company" in the job search CRM:</p>
+
+<div class="diagram">1. <span class="hi">Browser</span> sends <span class="hi2">POST /api/jobsearch/companies</span>
+
+2. <span class="hi">Caddy</span> checks basicauth, strips TLS, forwards to <span class="hi3">localhost:4116</span>
+
+3. <span class="hi">FastAPI</span> matches route in <span class="hi3">routers/jobsearch.py</span>
+   Injects dependency: <span class="dim">pool = Depends(db.get_jobsearch_pool)</span>
+
+4. Handler calls <span class="hi2">await pool.execute("INSERT INTO companies ...")</span>
+   <span class="dim">asyncpg sends SQL over a persistent pooled TCP connection to Postgres</span>
+   <span class="dim">No ORM. Raw SQL. Fast. Parameterized ($1) — no SQL injection possible.</span>
+
+5. Returns <span class="dim">{"ok": True, "id": "abc123"}</span> — Pydantic validates, FastAPI serializes</div>
+
+<p>What happens when a user triggers a job scrape:</p>
+
+<div class="diagram">1. <span class="hi">Browser</span> sends <span class="hi2">POST /api/jobsearch/trigger/scrape.sd</span>
+
+2. Handler validates <span class="hi3">task_type in allowed</span> set
+   Inserts row into <span class="hi3">os_events</span> table (status = "pending")
+
+3. Calls <span class="hi2">process_event.delay(event_id)</span>
+   <span class="dim">Celery serializes args to JSON → pushes to Redis queue</span>
+   <span class="dim">Handler returns immediately — non-blocking</span>
+
+4. <span class="hi">celery-worker</span> (separate container) picks up task from Redis
+   Loads event from Postgres, marks it <span class="hi3">processing</span>
+
+5. Runs <span class="hi2">sd_run(payload, session)</span>
+   Scraper fetches jobs, upserts into <span class="hi3">job_postings</span>
+   Marks event <span class="hi2">done</span></div>
+</section>
+
+<section id="two-domains">
+<h2>Two Domains, One App</h2>
+
+<p>Both domains point to the same VPS IP. Caddy terminates TLS on both, then forwards to the same FastAPI port. The frontend detects which domain it's on and adjusts theme and navigation accordingly.</p>
+
+<table>
+<tr><th>Domain</th><th>Purpose</th><th>Theme</th><th>Nav</th></tr>
+<tr><td><code>home.dmytropetryshchuk.com</code></td><td>Personal OS</td><td>Light</td><td>Job search, daily log, ideas, writing</td></tr>
+<tr><td><code>onekeyflow.com</code></td><td>Agency OS</td><td>Dark</td><td>Proposals, outreach, revenue</td></tr>
+</table>
+
+<pre><code>// Shell.tsx — no server-side routing needed
+const IS_OKF = window.location.hostname.includes('onekeyflow')
+// applies dark class to &lt;html&gt; for agency site</code></pre>
+</section>
+
+<section id="fastapi">
+<h2>FastAPI App</h2>
+
+<p><strong>FastAPI</strong> is an async Python web framework. It reads type hints to auto-generate validation and OpenAPI docs. Every route is an async function — it never blocks a thread while waiting for the database.</p>
+
+<h3>Entry point: <code>aios/main.py</code></h3>
+<p>The app has a <strong>lifespan</strong> — code that runs once on startup and once on shutdown. This is where connection pools are initialized:</p>
+
+<pre><code><span class="label">main.py</span>@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _configure_litellm()         # wire Langfuse callbacks
+    await db.init_jobsearch_pool()   # create asyncpg pools (warm connections)
+    await db.init_daily_log_pool()
+    yield                        # app runs here, serving requests
+    await db.close_jobsearch_pool()  # clean shutdown
+    await db.close_daily_log_pool()</code></pre>
+
+<h3>Dependency Injection</h3>
+<p>FastAPI's <code>Depends()</code> injects the database pool into route handlers. No global state accessed directly in handlers — testable and clean:</p>
+
+<pre><code>@router.post("/companies")
+async def create_company(
+    body: CompanyCreate,
+    pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)  # injected per request
+):
+    await pool.execute("INSERT INTO companies ...")
+    return {"ok": True}</code></pre>
+
+<p>The pool is created once at startup. <code>get_jobsearch_pool()</code> returns the module-level pool reference — calling it is free, creating connections is not (but the pool keeps them warm).</p>
+
+<h3>SPA fallback</h3>
+<p>The last route is a catch-all that serves <code>index.html</code> for every non-API path. This lets React Router handle navigation client-side — you can deep-link to any page and the server always returns the SPA:</p>
+
+<pre><code>@app.get("/{full_path:path}")
+async def spa(full_path: str) -> FileResponse:
+    candidate = _PUBLIC / full_path
+    if candidate.is_file():
+        return FileResponse(candidate)   # serve asset directly
+    return FileResponse(_PUBLIC / "index.html")  # else: SPA</code></pre>
+</section>
+
+<section id="database">
+<h2>Database Layer</h2>
+
+<h3>Two Postgres databases</h3>
+<p>Job search data and daily log data live in separate databases. This isolates concerns — the jobsearch DB can hold vectors and grow large without affecting habit tracking data.</p>
+
+<table>
+<tr><th>Database</th><th>Tables</th></tr>
+<tr><td><code>jobsearch</code></td><td>companies, contacts, interactions, job_postings, content_posts, notes, os_events, embeddings</td></tr>
+<tr><td><code>daily_log</code></td><td>habit_types, entries, habit_logs</td></tr>
+</table>
+
+<h3>What is a connection pool?</h3>
+<p>Opening a database connection is slow — TCP handshake, TLS, Postgres authentication. A <strong>pool</strong> maintains N pre-opened connections and loans them out per request:</p>
+
+<pre><code># db.py — pool created once at startup
+_jobsearch_pool = await asyncpg.create_pool(settings.jobsearch_database_url)
+# Default: min 10 connections ready to go
+
+# In any handler — gets a connection from the pool instantly
+row = await pool.fetchrow("SELECT * FROM companies WHERE id = $1", id)
+# Connection returned to pool when done
+</code></pre>
+
+<div class="callout warn">
+  <p><strong>Two connection flavors.</strong> FastAPI routes use <strong>asyncpg</strong> (async, no ORM). Celery workers use <strong>psycopg2</strong> (sync, plain SQL) — Celery tasks run in their own processes and can't use async code. The <code>SyncSession</code> in <code>db.py</code> wraps SQLAlchemy for the <code>os_events</code> model used by Celery.</p>
+</div>
+
+<h3>pgvector extension</h3>
+<p>The <code>jobsearch</code> database has the <code>vector</code> PostgreSQL extension. This adds a <code>vector(1536)</code> column type and an <code>ivfflat</code> index for approximate nearest-neighbor search:</p>
+
+<pre><code>-- Created in postgres/init.sh (runs once when Postgres container first starts)
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- embeddings table (migration 0008_add_pgvector)
+CREATE TABLE embeddings (
+    id          text PRIMARY KEY,
+    source_type text,           -- 'note', 'job_posting', 'vault'
+    source_id   text,           -- the ID or path of the source document
+    chunk_text  text,           -- first 4000 chars (for display)
+    embedding   vector(1536),   -- OpenAI text-embedding-3-small output
+    UNIQUE (source_type, source_id)
+);
+
+CREATE INDEX ON embeddings USING ivfflat (embedding vector_cosine_ops);</code></pre>
+
+<h3>SQLite files</h3>
+<table>
+<tr><th>File</th><th>Purpose</th></tr>
+<tr><td><code>/app/data/okf.db</code></td><td>OKF proposals, events, outreach contacts, monthly P&amp;L</td></tr>
+<tr><td><code>/app/data/sessions.db</code></td><td>Ima chat session history (cross-domain persistence)</td></tr>
+</table>
+
+<h3>Migrations: Alembic</h3>
+<p><strong>Alembic</strong> tracks schema changes as version files. Instead of running raw SQL when adding a column, you write a migration and Alembic applies it in order, tracking what's been run in an <code>alembic_version</code> table:</p>
+
+<pre><code>alembic -c migrations/jobsearch.ini upgrade head   # apply all pending migrations
+alembic -c migrations/daily_log.ini upgrade head
+
+# Migration files: migrations/jobsearch/versions/
+# Each file has upgrade() and downgrade() functions</code></pre>
+</section>
+
+<section id="celery">
+<h2>Celery Workers</h2>
+
+<p><strong>Celery</strong> is a distributed task queue. Tasks that are slow, periodic, or shouldn't block an HTTP response are offloaded here. Celery workers run as separate containers from the FastAPI app.</p>
+
+<h3>How it works</h3>
+<div class="diagram">FastAPI handler
+  calls <span class="hi2">process_event.delay(event_id)</span>
+  <span class="dim">→ serializes to JSON → pushes to Redis queue → returns immediately</span>
+
+<span class="hi">celery-worker</span> (separate container, same image)
+  <span class="dim">→ polls Redis → picks up task → runs process_event(event_id)</span>
+  <span class="dim">→ loads os_events row from Postgres → marks "processing"</span>
+  <span class="dim">→ dispatches to handler by event.type → marks "done" or "failed"</span>
+
+<span class="hi">celery-beat</span> (separate container)
+  <span class="dim">→ reads beat_schedule → creates os_events rows on cron → enqueues</span></div>
+
+<h3>The event audit trail</h3>
+<p>All background work flows through the <code>os_events</code> table. You can see exactly what ran, when, how long it took, and any error message:</p>
+
+<pre><code>-- Every trigger creates a row
+INSERT INTO os_events (id, source, type, payload, status)
+-- Status lifecycle:
+pending → processing → done
+                    → failed (error column filled)</code></pre>
+
+<h3>Beat schedule</h3>
+<table>
+<tr><th>Job</th><th>Schedule</th><th>What</th></tr>
+<tr><td><code>scrape-sd-morning</code></td><td>8:00 UTC daily</td><td>SimplifyJobs scrape</td></tr>
+<tr><td><code>scrape-sd-evening</code></td><td>20:00 UTC daily</td><td>Second daily scrape</td></tr>
+<tr><td><code>scrape-yc-8am</code></td><td>8:10 UTC daily</td><td>YC job board</td></tr>
+<tr><td><code>scrape-hn-8am</code></td><td>8:15 UTC daily</td><td>HN "Who's hiring"</td></tr>
+<tr><td><code>embed-backfill-weekly</code></td><td>3:00 UTC Sunday</td><td>Re-embed all notes + jobs</td></tr>
+</table>
+
+<h3>Two queues</h3>
+<p>The worker listens on <code>celery</code> (default — scrapers, embeds) and <code>okf</code> (proposal generation). OKF tasks are isolated so a slow proposal LLM call can't block job scrapes.</p>
+
+<h3>Lazy handler imports</h3>
+<p>Worker modules are imported inside <code>_import_handlers()</code>, not at module load. This prevents import-time circular dependencies and keeps the Celery app lightweight at startup:</p>
+
+<pre><code>def _import_handlers() -> dict:
+    from workers.scrapers.fathom import run as fathom_run
+    from workers.scrapers.jobspy_scraper import run as sd_run
+    # ...
+    return {
+        "fathom.received": fathom_run,
+        "scrape.sd": sd_run,
+        "embed.backfill": lambda payload, session: embed_backfill(),
+        "embed.vault": lambda payload, session: embed_vault(),
+    }</code></pre>
+</section>
+
+<section id="agent">
+<h2>Ima — The AI Agent</h2>
+
+<p>Ima is an agentic AI assistant that can use tools, run shell commands, edit the codebase, and query your data. She lives in <code>aios/agent.py</code> and is accessed through the persistent top-bar chat panel.</p>
+
+<h3>The tool-use loop</h3>
+<p>A standard LLM call takes a prompt and returns text. An <em>agent</em> takes a message and can call tools repeatedly until the task is done:</p>
+
+<div class="diagram">User: "find me senior eng jobs at AI startups"
+
+<span class="hi2">Iteration 1:</span>
+  LLM decides: call <span class="hi3">semantic_search(query="senior engineer AI startup")</span>
+  Tool runs → returns 5 matching jobs
+  Result appended to message history
+
+<span class="hi2">Iteration 2:</span>
+  LLM decides: call <span class="hi3">search_jobs(filters={stage: "active"})</span>
+  Tool runs → returns 10 more
+  Result appended
+
+<span class="hi2">Iteration 3:</span>
+  LLM has enough context → returns final response text
+  Loop exits → response streamed to browser</div>
+
+<h3>System prompt loading</h3>
+<p>Every request to Ima starts by loading <code>_load_instructions()</code> which assembles the system prompt from three sources:</p>
+
+<pre><code>def _load_instructions() -> str:
+    base = (prompts_dir / "ima.md").read_text()   # core personality + rules
+
+    # Appended if they exist:
+    # /app/data/memory/USER.md  → who Dima is, preferences
+    # /app/data/memory/MEMORY.md → accumulated facts from past conversations
+
+    return base + memory_sections</code></pre>
+
+<h3>Tools available to Ima</h3>
+<div class="tool-grid">
+  <div class="tool-card"><h4>upsert_company</h4><p>Find or create a company by name</p></div>
+  <div class="tool-card"><h4>upsert_contact</h4><p>Find or create a contact at a company</p></div>
+  <div class="tool-card"><h4>log_interaction</h4><p>Record an email, call, or meeting</p></div>
+  <div class="tool-card"><h4>search_jobs</h4><p>Filter job_postings by stage, company, etc.</p></div>
+  <div class="tool-card"><h4>get_job</h4><p>Get full details of one job posting</p></div>
+  <div class="tool-card"><h4>search_notes</h4><p>Full-text search across notes</p></div>
+  <div class="tool-card"><h4>create_note</h4><p>Save a new note</p></div>
+  <div class="tool-card"><h4>semantic_search</h4><p>Vector similarity search across notes, jobs, vault</p></div>
+  <div class="tool-card"><h4>run_shell</h4><p>Execute any shell command on the VPS</p></div>
+  <div class="tool-card"><h4>fetch_url</h4><p>Fetch and parse a webpage</p></div>
+  <div class="tool-card"><h4>read_file</h4><p>Read any file in the codebase (/repo/aios/)</p></div>
+  <div class="tool-card"><h4>write_file</h4><p>Write to a file in /repo/aios/</p></div>
+  <div class="tool-card"><h4>git_commit_and_push</h4><p>Commit + push to both remotes (triggers CI/CD)</p></div>
+  <div class="tool-card"><h4>read_memory</h4><p>Read USER.md or MEMORY.md</p></div>
+  <div class="tool-card"><h4>append_memory</h4><p>Save a fact to persistent memory files</p></div>
+  <div class="tool-card"><h4>save_session_summary</h4><p>Persist end-of-session insight</p></div>
+</div>
+
+<h3>Self-editing: how Ima modifies the codebase</h3>
+<p>The VPS mounts the live git repo into the container: <code>/home/dima/writing → /repo</code>. Ima's file tools operate on <code>/repo/aios/</code> — the actual source files on disk.</p>
+
+<div class="callout warn">
+  <p><strong>Not <code>/app</code>.</strong> The container also has <code>/app/</code> — a copy of the code baked into the Docker image at build time. Editing <code>/app/</code> changes an ephemeral layer that vanishes on the next deploy. All self-edits must target <code>/repo/aios/</code>. After editing, <code>git_commit_and_push</code> triggers CI/CD → Docker rebuild → auto-redeploy.</p>
+</div>
+
+<h3>Memory system</h3>
+<table>
+<tr><th>File</th><th>Contents</th><th>When loaded</th></tr>
+<tr><td><code>/app/data/memory/USER.md</code></td><td>Who Dima is, preferences, background</td><td>Every conversation start</td></tr>
+<tr><td><code>/app/data/memory/MEMORY.md</code></td><td>Accumulated facts, past decisions</td><td>Every conversation start</td></tr>
+</table>
+
+<p>Both files are prepended to the system prompt — Ima has full context without the user re-explaining anything. The Evermemos pattern (every 5 exchanges) nudges Ima to ask if anything is worth saving to memory.</p>
+</section>
+
+<section id="litellm">
+<h2>LiteLLM + Langfuse</h2>
+
+<h3>LiteLLM</h3>
+<p><strong>LiteLLM</strong> is a unified interface for 100+ LLM providers. Instead of writing provider-specific code, you call <code>litellm.acompletion(model="deepseek/deepseek-chat", ...)</code> and LiteLLM handles the translation. Swapping models is a one-line change.</p>
+
+<pre><code># agent.py — streaming tool-use call
+response = await litellm.acompletion(
+    model="deepseek/deepseek-chat",   # cheap, fast, tool-use capable
+    messages=messages,                 # full history + system prompt
+    tools=TOOLS,                       # JSON schema of all tools
+    stream=True,                       # SSE streaming
+)
+async for chunk in response:
+    # process: text-delta, tool-call, tool-result</code></pre>
+
+<h3>Why DeepSeek?</h3>
+<p>DeepSeek is ~10-20× cheaper than GPT-4 for the same quality on tool-use tasks. It speaks the OpenAI tool-use protocol (same JSON schema), so switching models is trivial.</p>
+
+<h3>Langfuse</h3>
+<p><strong>Langfuse</strong> traces every LiteLLM call — prompt, response, tools called, latency, token counts. One-time setup in <code>main.py</code> — no code changes needed in routes:</p>
+
+<pre><code>litellm.success_callback = ["langfuse"]
+litellm.failure_callback = ["langfuse"]</code></pre>
+
+<div class="callout info">
+  <p><strong>Version pinning.</strong> Langfuse 3.x+ moved to an OpenTelemetry-based API and removed <code>Langfuse().trace()</code>. LiteLLM 1.89.3 requires that method. Pin: <code>langfuse==2.60.10</code> — the last release with the old low-level SDK. No Dockerfile patches needed with this pin.</p>
+</div>
+</section>
+
+<section id="embeddings">
+<h2>pgvector + Semantic Search (RAG)</h2>
+
+<p>Keyword search finds documents containing a word. Semantic search finds documents that <em>mean</em> the same thing — "senior engineer AI startup" can surface a job posting titled "founding ML infrastructure engineer."</p>
+
+<h3>How embeddings work</h3>
+<p>An <em>embedding</em> is a list of 1536 numbers representing a text's meaning. Similar meanings produce similar number lists. Cosine distance between two vectors measures how similar their meanings are.</p>
+
+<div class="diagram">Text: "founding engineer AI startup"
+       ↓ OpenAI text-embedding-3-small (~$0.02 / million tokens)
+Vector: [0.021, -0.048, 0.103, ... 1536 floats]
+       ↓ stored in Postgres via pgvector
+
+Query: "senior ML engineer"
+       ↓ same embedding process → query vector
+       ↓ SELECT ... ORDER BY embedding &lt;=&gt; $1 LIMIT 10
+         <span class="dim">(&lt;=&gt; = cosine distance, lower = more similar)</span>
+Results ranked by semantic similarity</div>
+
+<h3>What gets embedded</h3>
+<table>
+<tr><th>Source</th><th>source_type</th><th>Trigger</th></tr>
+<tr><td>Job postings</td><td>job_posting</td><td>Weekly Sunday backfill cron</td></tr>
+<tr><td>Notes</td><td>note</td><td>Weekly Sunday backfill cron</td></tr>
+<tr><td>Vault markdown files</td><td>vault</td><td>On save (vault router); manual <code>embed.vault</code> trigger</td></tr>
+<tr><td>Fathom meeting notes</td><td>vault</td><td>On Fathom webhook receive</td></tr>
+</table>
+
+<h3>The embed pipeline</h3>
+<pre><code># services/embeddings.py
+async def embed_async(text: str) -> list[float]:
+    resp = await litellm.aembedding(model="text-embedding-3-small", input=[text])
+    d = resp.data[0]
+    # LiteLLM returns either a dict or an object depending on version
+    return d["embedding"] if isinstance(d, dict) else d.embedding
+
+# tasks.py — Celery task runs in worker (sync)
+@celery_app.task(name="embed.document")
+def embed_document(source_type, source_id, text):
+    vec = embed_sync(text)     # sync version of embed_async
+    # Upsert: ON CONFLICT (source_type, source_id) DO UPDATE
+    # So re-embedding an updated document works correctly</code></pre>
+</section>
+
+<section id="routers">
+<h2>Routers</h2>
+
+<table>
+<tr><th>File</th><th>Prefix</th><th>What it handles</th></tr>
+<tr><td><code>routers/jobsearch.py</code></td><td>/api/jobsearch</td><td>Companies, contacts, interactions, jobs, notes, Ima stream endpoint, semantic search, triggers</td></tr>
+<tr><td><code>routers/home.py</code></td><td>/api/home</td><td>Home dashboard data, recent Fathom meetings list</td></tr>
+<tr><td><code>routers/vault.py</code></td><td>/api/vault</td><td>Browse/read/write Obsidian vault files; triggers embed on save</td></tr>
+<tr><td><code>routers/finances.py</code></td><td>/api/finances</td><td>Parse personal-finances dashboard data (data.js, ledger.csv)</td></tr>
+<tr><td><code>routers/proposals.py</code></td><td>/api/proposals</td><td>OKF proposal generation (LLM + PandaDoc, async via Celery)</td></tr>
+<tr><td><code>routers/outreach.py</code></td><td>/api/outreach</td><td>OKF outreach contacts, sessions, retrospectives</td></tr>
+<tr><td><code>routers/revenue.py</code></td><td>/api/revenue</td><td>OKF monthly P&amp;L</td></tr>
+<tr><td><code>routers/sessions.py</code></td><td>/api/sessions</td><td>Ima chat session CRUD and retrieval</td></tr>
+<tr><td><code>routers/webhooks.py</code></td><td>/webhooks</td><td>Fathom webhook receiver (HMAC-SHA256 signature verification)</td></tr>
+<tr><td><code>routers/daily_log.py</code></td><td>/api/daily-log</td><td>Habit tracking entries</td></tr>
+<tr><td><code>routers/writing.py</code></td><td>/api/writing</td><td>Freewrite journal entries</td></tr>
+<tr><td><code>routers/transcribe.py</code></td><td>/api/transcribe</td><td>Whisper local speech-to-text</td></tr>
+</table>
+</section>
+
+<section id="frontend">
+<h2>React Frontend</h2>
+
+<p>The frontend is a React 19 + Vite + Tailwind SPA. It's built into <code>aios/public/</code> during the Docker build and served by FastAPI's static file handler — no separate web server needed.</p>
+
+<h3>Stack</h3>
+<table>
+<tr><th>Library</th><th>Why</th></tr>
+<tr><td>React 19</td><td>Latest — concurrent features, actions</td></tr>
+<tr><td>Vite</td><td>Fast dev server with HMR; <code>npm run dev</code> proxies <code>/api/*</code> → <code>localhost:4116</code></td></tr>
+<tr><td>Tailwind v4</td><td>Utility classes; <code>darkMode: 'class'</code> for domain-based theming</td></tr>
+<tr><td>React Router v6</td><td>Client-side routing — one HTML file, many "pages"</td></tr>
+<tr><td>marked + DOMPurify</td><td>Render Ima's markdown responses safely (sanitized HTML)</td></tr>
+<tr><td>Geist Variable</td><td>Primary sans-serif font</td></tr>
+<tr><td>Instrument Serif</td><td>Display/heading font</td></tr>
+</table>
+
+<h3>Build pipeline</h3>
+<pre><code>cd aios/frontend
+npm run dev    # dev server :5173, proxies /api/* → :4116
+
+npm run build  # tsc -b && vite build → aios/public/
+               # Docker multi-stage build runs this automatically</code></pre>
+
+<h3>Key files</h3>
+<table>
+<tr><th>File</th><th>Purpose</th></tr>
+<tr><td><code>src/Shell.tsx</code></td><td>App shell: sidebar nav, Ima top bar + drawer, session state</td></tr>
+<tr><td><code>src/App.tsx</code></td><td>React Router route definitions</td></tr>
+<tr><td><code>src/pages/Home/</code></td><td>Dashboard with recent Fathom meetings</td></tr>
+<tr><td><code>src/pages/Vault/</code></td><td>Two-pane knowledge base browser (tree + markdown viewer/editor)</td></tr>
+<tr><td><code>src/pages/Finances/</code></td><td>Finances overview, pipeline, subscriptions tabs</td></tr>
+</table>
+</section>
+
+<section id="ima-panel">
+<h2>ImaPanel</h2>
+
+<p>The global chat drawer lives in <code>Shell.tsx</code> — always available, always in the layout shell. A full-width "Talk to Ima" bar at the top opens a 520px-wide right-side panel.</p>
+
+<h3>Features</h3>
+<ul class="bullets">
+  <li><strong>Pinnable</strong> — pin open so it stays visible while navigating between pages</li>
+  <li><strong>Session history</strong> — every conversation is saved; tap History to resume any past chat</li>
+  <li><strong>Cross-domain handoff</strong> — navigate to <code>onekeyflow.com?session=abc</code> to continue a chat started on the personal site</li>
+  <li><strong>Inline tool cards</strong> — tool calls appear between text segments in chronological order, not grouped at the bottom</li>
+  <li><strong>Evermemos</strong> — every 5 exchanges, Ima prompts "Worth remembering?" to capture insights to MEMORY.md</li>
+</ul>
+
+<h3>Ordered message parts</h3>
+<p>Agent messages use a <code>parts[]</code> array so tool cards render inline between text:</p>
+
+<pre><code>type ImaPart =
+  | { type: 'text'; content: string }    // rendered as markdown
+  | { type: 'tool'; call: ImaToolCall }  // rendered as expandable card
+
+// Built as SSE chunks arrive:
+// text-delta  → append to last text part (or create new one if last was a tool)
+// tool-call   → push new tool part
+// tool-result → find matching tool part, add result</code></pre>
+</section>
+
+<section id="sse">
+<h2>SSE Streaming</h2>
+
+<p><strong>Server-Sent Events</strong> let the server push data to the browser over a long-lived HTTP connection. Unlike WebSockets, SSE is one-way (server → browser) and works over plain HTTP — no upgrade protocol needed.</p>
+
+<h3>Server side (<code>agent.py</code>)</h3>
+<pre><code>@router.post("/agents/stream")
+async def stream(body: ChatRequest):
+    return StreamingResponse(
+        _ima_stream(body.messages),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+async def _ima_stream(messages):
+    # Tool-use loop — each iteration may yield tool-call + tool-result events
+    while True:
+        async for chunk in litellm.acompletion(stream=True, ...):
+            if chunk has text:
+                yield f'data: {{"type":"text-delta","payload":{{"text":...}}}}\n\n'
+            if chunk has tool_call:
+                yield f'data: {{"type":"tool-call","payload":{{...}}}}\n\n'
+        if no more tool calls:
+            break
+        # run tools, yield results, loop back
+    yield 'data: [DONE]\n\n'</code></pre>
+
+<h3>Client side (<code>Shell.tsx</code>)</h3>
+<pre><code>const reader = res.body!.getReader()
+while (true) {
+  const { done, value } = await reader.read()
+  if (done) break
+  // split on \n\n (SSE event separator)
+  // parse each JSON chunk
+  // update React state → re-render
+}</code></pre>
+
+<p>The <code>\n\n</code> double newline is the SSE spec — it marks the end of one event. The browser splits the stream on this and processes each chunk.</p>
+</section>
+
+<section id="docker">
+<h2>Docker + Compose</h2>
+
+<h3>Multi-stage Dockerfile</h3>
+<p>Two build stages: frontend compilation (Node.js) and backend (Python). Only the outputs end up in the final image — no npm or build tools in production:</p>
+
+<pre><code>FROM node:22-alpine AS frontend-builder
+WORKDIR /app
+COPY aios/frontend ./aios/frontend
+RUN cd aios/frontend && npm install && npm run build
+# output: aios/public/ (compiled JS + CSS)
+
+FROM python:3.12-slim AS runner
+WORKDIR /app
+RUN apt-get install -y git openssh-client \
+    && git config --global --add safe.directory '*'  # needed for Ima's git push
+COPY aios/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY aios/ .
+COPY --from=frontend-builder /app/aios/public ./public
+EXPOSE 4116
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "4116"]</code></pre>
+
+<h3>Services</h3>
+<table>
+<tr><th>Service</th><th>Image</th><th>Command</th></tr>
+<tr><td><code>aios</code></td><td>Built from repo</td><td><code>uvicorn main:app</code></td></tr>
+<tr><td><code>celery-worker</code></td><td>Same image</td><td><code>celery -A tasks worker -Q celery,okf</code></td></tr>
+<tr><td><code>celery-beat</code></td><td>Same image</td><td><code>celery -A tasks beat</code></td></tr>
+<tr><td><code>postgres</code></td><td>pgvector/pgvector:pg16</td><td>Postgres 16 + vector extension</td></tr>
+<tr><td><code>redis</code></td><td>redis:7-alpine</td><td>Celery broker</td></tr>
+</table>
+
+<h3>Key volume mounts</h3>
+<table>
+<tr><th>Host path</th><th>Container</th><th>Why</th></tr>
+<tr><td><code>/home/dima/writing</code></td><td><code>/repo</code></td><td>Live git repo — Ima's self-editing target</td></tr>
+<tr><td><code>/home/dima/core-aios-kb</code></td><td><code>/vault</code></td><td>Obsidian knowledge base</td></tr>
+<tr><td><code>/home/dima/personal-finances</code></td><td><code>/home/dima/personal-finances</code></td><td>Finances dashboard data (read-only)</td></tr>
+</table>
+</section>
+
+<section id="cicd">
+<h2>CI/CD Pipeline</h2>
+
+<p>Two GitHub Actions jobs in <code>.github/workflows/deploy.yml</code>, both triggered on push to <code>master</code> of the <code>aios-private</code> repo.</p>
+
+<h3>deploy-app</h3>
+<p>Triggers when anything in <code>aios/**</code> changes:</p>
+<ul class="bullets">
+  <li>Build Docker image on GitHub Actions runner (free compute)</li>
+  <li>Push to GitHub Container Registry (<code>ghcr.io/dpetryshchuk/ai-os/aios:latest</code>)</li>
+  <li>SSH into VPS: <code>docker compose pull aios && docker compose up -d aios celery-worker celery-beat</code></li>
+</ul>
+
+<h3>deploy-infra</h3>
+<p>Triggers when <code>docker-compose.yml</code> or <code>caddy/**</code> changes:</p>
+<ul class="bullets">
+  <li>SSH into VPS: <code>docker compose up -d</code> + reload Caddy</li>
+</ul>
+
+<h3>Two git remotes</h3>
+<table>
+<tr><th>Remote</th><th>Repo</th><th>Purpose</th></tr>
+<tr><td><code>private</code></td><td>dpetryshchuk/aios-private</td><td>Working copy; VPS CI/CD watches this</td></tr>
+<tr><td><code>origin</code></td><td>dpetryshchuk/ai-os</td><td>Public portfolio snapshot</td></tr>
+</table>
+
+<pre><code>git push private master && git push origin master</code></pre>
+</section>
+
+<section id="caddy">
+<h2>Caddy Reverse Proxy</h2>
+
+<p><strong>Caddy</strong> is the only process listening on ports 80 and 443. It handles TLS automatically (Let's Encrypt cert auto-renewal), enforces basicauth, and proxies to Docker containers. Runs as a host-level systemd service — not inside Docker — so it survives container restarts.</p>
+
+<pre><code># caddy/Caddyfile
+home.dmytropetryshchuk.com {
+    basicauth { import /etc/caddy/auth_credentials }
+    reverse_proxy localhost:4116
+}
+
+onekeyflow.com {
+    basicauth { import /etc/caddy/auth_credentials }
+    reverse_proxy localhost:4116
+}
+
+# reload after Caddyfile changes:
+sudo systemctl reload-or-restart caddy</code></pre>
+</section>
+
+<section id="terraform">
+<h2>Terraform</h2>
+
+<p><strong>Terraform</strong> turns infrastructure into code. The <code>infra/terraform/</code> directory describes the entire server setup — VPS, firewall, DNS, GitHub secrets. Run <code>terraform apply</code> to spin up a fresh instance for a client.</p>
+
+<h3>Resources managed</h3>
+<table>
+<tr><th>Resource</th><th>What</th></tr>
+<tr><td><code>hcloud_server.vps</code></td><td>Hetzner CX22 (~$4.50/mo, 2 vCPU 4GB)</td></tr>
+<tr><td><code>hcloud_firewall.public</code></td><td>Allow TCP 22, 80, 443</td></tr>
+<tr><td><code>porkbun_dns_record.*</code></td><td>A records for each subdomain</td></tr>
+<tr><td><code>github_actions_secret.vps_*</code></td><td>VPS IP + SSH keys for CI/CD</td></tr>
+</table>
+
+<pre><code>terraform init    # download providers (hcloud, porkbun, github)
+terraform plan    # preview what will change (nothing applied)
+terraform apply   # create or update infrastructure</code></pre>
+
+<div class="callout warn">
+  <p><strong>Existing VPS.</strong> If the VPS already exists, <code>terraform import hcloud_server.vps &lt;server-id&gt;</code> before applying, or Terraform will try to create a second server.</p>
+</div>
+
+<p>State is tracked in <code>terraform.tfstate</code>. Terraform compares this against reality on each <code>plan</code>. Never edit infrastructure by hand if Terraform manages it — your change will be reverted on the next <code>apply</code>.</p>
+</section>
+
+<section id="webhooks">
+<h2>Webhooks — Fathom Meeting Flow</h2>
+
+<div class="diagram">Fathom records a meeting
+  ↓
+POST /webhooks/fathom
+  <span class="dim">HMAC-SHA256 signature in Fathom-Signature header</span>
+  <span class="dim">Verified against FATHOM_WEBHOOK_SECRET</span>
+  ↓
+os_events row created → process_event.delay()
+  ↓
+<span class="hi">celery-worker</span> runs <span class="hi2">fathom.run(payload)</span>
+  <span class="dim">Builds markdown: title, date, attendees, summary, action items, transcript</span>
+  ↓
+Writes to <span class="hi3">/vault/Meetings/YYYY-MM-DD - Title.md</span>
+  ↓
+<span class="hi2">embed_document.delay("vault", path, content)</span>
+  <span class="dim">OpenAI embedding → pgvector upsert</span>
+
+Result: Ima can now find this meeting via semantic_search
+"what did I discuss with Bram?" → surfaces the vault note</div>
+</section>
+
+<section id="sessions">
+<h2>Chat Sessions</h2>
+
+<p>Every Ima conversation is saved to <code>sessions.db</code> with a UUID. The session stores the full message history and a generated title (first user message, cleaned up).</p>
+
+<h3>Cross-domain handoff</h3>
+<p>When switching between domains, the session ID travels as a URL parameter:</p>
+
+<pre><code>// In Shell.tsx — before navigating away
+window.location.href = `https://onekeyflow.com?session=${sessionIdRef.current}`
+
+// On load — restore session from URL param
+const sessionId = new URLSearchParams(location.search).get('session')
+if (sessionId) loadSession(sessionId)
+// Both domains hit the same /api/sessions backend</code></pre>
+</section>
+
+<section id="vault">
+<h2>Obsidian Vault</h2>
+
+<p>The vault at <code>/home/dima/core-aios-kb/</code> is mounted into the container at <code>/vault</code>. The Knowledge Base tab lets you browse and edit notes directly in the app.</p>
+
+<table>
+<tr><th>Endpoint</th><th>What</th></tr>
+<tr><td>GET /api/vault/tree</td><td>All .md files with path, size, modified time</td></tr>
+<tr><td>GET /api/vault/file?path=…</td><td>Read file content</td></tr>
+<tr><td>PUT /api/vault/file?path=…</td><td>Save file; triggers <code>embed_document.delay()</code></td></tr>
+<tr><td>POST /api/vault/file?path=…</td><td>Create new empty file</td></tr>
+</table>
+
+<p>Path traversal protection: every path is resolved against the vault root; anything that escapes it is rejected with HTTP 400.</p>
+</section>
+
+<section id="self-editing">
+<h2>Self-Editing</h2>
+
+<p>Ima can modify her own codebase — update prompts, add features, fix bugs — and push to git to trigger an auto-redeploy.</p>
+
+<ul class="bullets">
+  <li><code>read_file(path)</code> reads from <code>/repo/aios/{path}</code></li>
+  <li><code>write_file(path, content)</code> writes to <code>/repo/aios/{path}</code></li>
+  <li><code>run_shell(cmd)</code> can run anything: <code>git diff</code>, <code>grep</code>, <code>npm run build</code></li>
+  <li><code>git_commit_and_push(message)</code> commits and pushes to both remotes</li>
+  <li>CI/CD picks up the push → Docker rebuild → rolling container restart (~2 min)</li>
+</ul>
+
+<div class="callout warn">
+  <p><strong>The rule: always use <code>/repo/aios/</code>.</strong> The <code>/app/</code> directory is baked into the Docker image at build time. Edits there disappear on the next deploy. Only <code>/repo/</code> is the persistent git checkout that survives container recreation.</p>
+</div>
+
+<p>The system prompt (<code>prompts/ima.md</code>) contains explicit rules enforcing this, plus: always read <code>frontend-design.md</code> before making UI changes, and always push to both remotes.</p>
+</section>
+
+</main>
+</div>
+
+<script>
+const sections = document.querySelectorAll('section[id]')
+const navLinks = document.querySelectorAll('nav ul li a')
+
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navLinks.forEach(a => a.classList.remove('active'))
+      const active = document.querySelector(`nav a[href="#${entry.target.id}"]`)
+      if (active) active.classList.add('active')
+    }
+  })
+}, { rootMargin: '-20% 0px -70% 0px' })
+
+sections.forEach(s => observer.observe(s))
+</script>
+
 </body>
 </html>
