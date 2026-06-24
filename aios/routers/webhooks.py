@@ -1,16 +1,14 @@
 import hmac
 import hashlib
-import json
-import secrets
 from typing import Callable
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 import db
+import events
 from config import settings
 from schemas import WebhookResponse
-from tasks import process_event
 
 router = APIRouter()
 
@@ -68,11 +66,6 @@ async def receive_webhook(
 
     _verify_signature(source, body, request.headers)
 
-    event_id = secrets.token_hex(8)
-    await pool.execute(
-        "INSERT INTO os_events (id, source, type, payload) VALUES ($1,$2,$3,$4::jsonb)",
-        event_id, "webhook", f"{source}.received", json.dumps(payload),
-    )
-    process_event.delay(event_id)
+    event_id = await events.emit(pool, "webhook", f"{source}.received", payload)
 
     return WebhookResponse(event_id=event_id)

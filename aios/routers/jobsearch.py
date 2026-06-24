@@ -12,8 +12,9 @@ from fastapi.responses import StreamingResponse
 from workers.scrapers.jobspy_scraper import DEFAULT_CONFIG as JOBSPY_DEFAULTS, SOURCE_KEY as JOBSPY_SOURCE
 
 import db
+import events
 from agent import agentic_stream
-from tasks import embed_document, process_event
+from tasks import embed_document
 from config import settings
 from services import embeddings as emb_svc
 from schemas import (
@@ -458,10 +459,5 @@ async def trigger_task(task_type: str, pool: asyncpg.Pool = Depends(db.get_jobse
     allowed = {"scrape.sd", "scrape.yc", "scrape.hn", "embed.backfill", "embed.vault"}
     if task_type not in allowed:
         raise HTTPException(400, f"Unknown task type: {task_type}")
-    eid = secrets.token_hex(8)
-    await pool.execute(
-        "INSERT INTO os_events (id, source, type, payload) VALUES ($1,$2,$3,$4::jsonb)",
-        eid, "ui", task_type, json.dumps({}),
-    )
-    process_event.delay(eid)
+    eid = await events.emit(pool, "ui", task_type, {})
     return TriggerResponse(event_id=eid)

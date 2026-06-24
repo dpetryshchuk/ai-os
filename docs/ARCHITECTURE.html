@@ -305,6 +305,7 @@
     <li><a href="#fastapi">FastAPI</a></li>
     <li><a href="#async">Async Python</a></li>
     <li><a href="#database">Database Layer</a></li>
+    <li><a href="#seams">Data-Access Seams</a></li>
     <li><a href="#pgvector">pgvector + RAG</a></li>
     <li><a href="#celery">Celery + Redis</a></li>
     <li><a href="#agent">Ima Agent</a></li>
@@ -413,8 +414,8 @@
 <div class="diagram">1. <span class="hi">Browser</span> sends <span class="hi2">POST /api/jobsearch/trigger/scrape.sd</span>
 
 2. Handler validates <span class="hi3">task_type in allowed_types</span> set
-   Inserts row into <span class="hi3">os_events</span>: {type: "scrape.sd", status: "pending"}
-   Calls <span class="hi2">process_event.delay(event_id)</span>
+   Calls <span class="hi2">events.emit(pool, "ui", task_type, {})</span>
+   <span class="dim">→ inserts os_events {type: "scrape.sd", status: "pending"} + process_event.delay(event_id)</span>
    <span class="dim">Celery serializes to JSON → pushes to "celery" list in Redis</span>
    <span class="dim">Returns immediately — {"ok": true} — does not wait for scrape to finish</span>
 
@@ -634,6 +635,67 @@ def downgrade():
     op.drop_column('contacts', 'linkedin_url')</code></pre>
 </section>
 
+<!-- ═══════════════════════════════════════════════════════════════ SEAMS -->
+<section id="seams">
+<h2>Data-Access Seams — One Interface, Two Adapters</h2>
+
+<div class="concept-box">
+  <div class="concept-label">The problem this solves</div>
+  <p>The same database logic used to be hand-written at every call site. "Create an os_event and enqueue it" lived in two routers and a Celery task. "Embed text and upsert it" was copy-pasted four times. "Find-or-create a company / job posting" was implemented twice — once with asyncpg in the agent, once with psycopg2 in the scraper — and the two copies had <em>drifted</em>. When logic lives in many places, it changes in some and not others. Bugs hide in the gap.</p>
+</div>
+
+<p>The fix: each piece of shared data logic now lives in <strong>one module</strong> that owns the invariant. Because the app reaches Postgres through two drivers — <strong>asyncpg</strong> (FastAPI routes) and <strong>psycopg2</strong> (Celery workers) — each module exposes <strong>one interface with two adapters</strong>: an async one for routes, a sync one for workers. They share the contract (column set, conflict key, id scheme); only the literal SQL paramstyle differs.</p>
+
+<table>
+<tr><th>Module</th><th>Owns</th><th>Async adapter</th><th>Sync adapter</th></tr>
+<tr><td><code>events.py</code></td><td>Creating an <code>os_events</code> row + enqueuing <code>process_event</code></td><td><code>emit(pool, …)</code></td><td><code>emit_sync(…)</code></td></tr>
+<tr><td><code>services/embeddings.py</code></td><td>The <code>embeddings</code>-table upsert (ON CONFLICT key, 4000-char chunk, vector format)</td><td><code>upsert(pool, …)</code></td><td><code>upsert_sync(conn, …)</code></td></tr>
+<tr><td><code>intake.py</code></td><td>Find-or-create for companies + job postings (the dedup invariant)</td><td><code>find_or_create_company</code> / <code>find_or_create_job_posting</code></td><td><code>…_sync</code></td></tr>
+</table>
+
+<pre><code># events.py — the single seam for emitting an os_event
+async def emit(pool, source, type, payload=None) -> str:   # FastAPI routes
+    event_id = new_event_id()
+    await pool.execute("INSERT INTO os_events (id, source, type, payload) ...", ...)
+    _enqueue(event_id)            # process_event.delay(event_id)
+    return event_id
+
+def emit_sync(source, type, payload=None) -> str:          # Celery (SyncSession)
+    ...                            # same invariant, sync driver
+
+# Before: webhooks.py, jobsearch.trigger, and run_scheduled each hand-wrote
+# the INSERT + secrets.token_hex(8) + process_event.delay. Now they call emit().</code></pre>
+
+<div class="callout info">
+  <p><strong>Why two adapters and not one driver?</strong> Celery runs in separate processes that can't share FastAPI's asyncio event loop — they genuinely need a sync driver. Two real callers across a seam means two adapters is honest, not redundant. Forcing everything onto one driver would mean either blocking the async web server or running asyncio inside Celery — both worse than a small, shared invariant with two thin adapters.</p>
+</div>
+
+<h3>The agent tool registry</h3>
+<p>Ima's tool dispatch was a single 500-line <code>if/elif name == …</code> ladder with SQL inline in each branch. It's now a <strong>registry</strong>: a <code>_TOOL_HANDLERS</code> dict mapping each tool name to an <code>async handler(inputs, pool)</code>. Adding a tool means registering an adapter, not editing a conditional. The CRM tools (<code>upsert_company</code>, <code>upsert_job_posting</code>) now delegate to <code>intake.py</code> instead of carrying their own copy of the find-or-create SQL — so the agent and the scraper can no longer drift apart.</p>
+
+<pre><code># agent.py — dispatch is now a lookup, not a ladder
+_TOOL_HANDLERS = {"upsert_company": _tool_upsert_company, ...}  # 30 tools
+
+async def run_tool(name, inputs, pool):
+    handler = _TOOL_HANDLERS.get(name)
+    if handler is None:
+        return json.dumps({"error": f"Unknown tool: {name}"})
+    return await handler(inputs, pool)</code></pre>
+
+<h3>The test surface</h3>
+<p>Tests run with <code>pytest</code> from <code>aios/</code> and don't touch a real Postgres. <code>tests/conftest.py</code> provides fakes that satisfy each driver's interface: an <code>AsyncMock</code> asyncpg pool and a <code>FakeConn</code> that records SQL and serves staged results. A module's invariant is exercised by injecting a fake across its interface — for example <code>sync_jobs_to_db(jobs, conn=…)</code> now takes an injectable connection, so the scraper's filter chain and dedup orchestration are testable without a database. The agent registry has a coverage test that pins <code>set(_TOOL_HANDLERS) == declared TOOLS</code>, so a tool can never be declared without a handler.</p>
+
+<div class="interview-box">
+  <div class="ib-label">Interview talking points</div>
+  <ul>
+    <li>Duplication isn't a style problem — it's a correctness problem. Two copies of one rule drift; the bug is the divergence, not the repetition</li>
+    <li>A seam with two real callers earns two adapters; a seam with one caller is hypothetical — don't build it (e.g. <code>upsert_contact</code> stays in the agent, its only caller)</li>
+    <li>Depth = leverage at the interface: a lot of behaviour behind a small call. <code>emit()</code> hides id-generation, the INSERT, and the enqueue behind four arguments</li>
+    <li>The interface is the test surface — if you can inject a fake across it, the module is the right shape</li>
+  </ul>
+</div>
+</section>
+
 <!-- ═══════════════════════════════════════════════════════════════ PGVECTOR -->
 <section id="pgvector">
 <h2>pgvector + Semantic Search (RAG)</h2>
@@ -677,14 +739,19 @@ Results: the 10 semantically closest documents</div>
   <p><strong>Critical distinction: search_notes vs semantic_search.</strong> <code>search_notes</code> is full-text SQL search against the <code>notes</code> Postgres table. Fathom meeting notes are <em>vault files</em> — they live on disk as markdown, not in the notes table. To find a meeting, Ima must use <code>semantic_search(source_type="vault")</code> which queries the <code>embeddings</code> table.</p>
 </div>
 
-<pre><code># services/embeddings.py
-async def embed_async(text: str) -> list[float]:
-    resp = await litellm.aembedding(model="text-embedding-3-small", input=[text])
-    d = resp.data[0]
-    return d["embedding"] if isinstance(d, dict) else d.embedding
+<pre><code># services/embeddings.py — one upsert invariant, two driver adapters
+async def upsert(pool, source_type, source_id, text):       # FastAPI routes (asyncpg)
+    vec = await embed_async(text)
+    await pool.execute("INSERT INTO embeddings ... ON CONFLICT (source_type, source_id) DO UPDATE ...", ...)
 
-# Upsert: ON CONFLICT (source_type, source_id) DO UPDATE
-# So re-embedding an updated document doesn't create duplicates</code></pre>
+def upsert_sync(conn, source_type, source_id, text):        # Celery workers (psycopg2)
+    vec = embed_sync(text)                                   # caller owns the connection,
+    with conn, conn.cursor() as cur:                         # so a backfill loop reuses one
+        cur.execute("INSERT INTO embeddings ... ON CONFLICT (source_type, source_id) DO UPDATE ...", ...)
+
+# ON CONFLICT (source_type, source_id) DO UPDATE → re-embedding never duplicates.
+# Before: this INSERT was copy-pasted in 4 places (embed_document, embed_backfill,
+# embed_vault, and the async route). Now it lives once per driver.</code></pre>
 
 <div class="interview-box">
   <div class="ib-label">Interview talking points</div>
@@ -818,6 +885,9 @@ The LLM never "runs" the tools — it emits a JSON blob saying
 {"tool_calls": [{"name": "semantic_search", "arguments": {"query": "Bram", "source_type": "vault"}}]}
 
 # We execute it, get results, append to messages, call LLM again</code></pre>
+
+<h3>Tool dispatch — a registry, not a ladder</h3>
+<p>The 30 tools dispatch through a <code>_TOOL_HANDLERS</code> dict (<code>name → async handler(inputs, pool)</code>) rather than one long <code>if/elif</code> chain. Each handler is independently testable, and the CRM tools delegate their find-or-create SQL to <code>intake.py</code> so the agent and the scraper share one deduplication invariant. See <a href="#seams">Data-Access Seams</a> for the full pattern.</p>
 
 <h3>System prompt loading</h3>
 <pre><code>def _load_instructions() -> str:

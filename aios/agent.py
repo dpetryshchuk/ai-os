@@ -7,6 +7,8 @@ from typing import AsyncIterator
 import asyncpg
 import litellm
 
+import intake
+
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
@@ -506,17 +508,12 @@ def _new_id() -> str:
     return secrets.token_hex(8)
 
 
-async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
-    try:
-        if name == "upsert_company":
-            row = await pool.fetchrow("SELECT id FROM companies WHERE lower(name) = lower($1)", inputs["name"])
-            if row:
-                return json.dumps({"id": row["id"], "created": False})
-            cid = _new_id()
-            await pool.execute("INSERT INTO companies (id, name, website) VALUES ($1, $2, $3)", cid, inputs["name"], inputs.get("website"))
-            return json.dumps({"id": cid, "created": True})
+async def _tool_upsert_company(inputs, pool):
+            cid, created = await intake.find_or_create_company(pool, inputs["name"], inputs.get("website"))
+            return json.dumps({"id": cid, "created": created})
 
-        elif name == "upsert_contact":
+
+async def _tool_upsert_contact(inputs, pool):
             row = await pool.fetchrow(
                 "SELECT id FROM contacts WHERE lower(name) = lower($1) AND company_id = $2",
                 inputs["name"], inputs["company_id"],
@@ -532,13 +529,14 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             )
             return json.dumps({"id": cid, "created": True})
 
-        elif name == "upsert_job_posting":
-            row = await pool.fetchrow(
-                "SELECT id FROM job_postings WHERE company_id = $1 AND lower(title) = lower($2)",
-                inputs["company_id"], inputs["title"],
+
+async def _tool_upsert_job_posting(inputs, pool):
+            jid, created, _existing = await intake.find_or_create_job_posting(
+                pool, inputs["company_id"], inputs["title"],
+                link=inputs.get("link"), source=inputs.get("source"),
+                status=inputs.get("status", "new"), resume_path=inputs.get("resume_path"),
             )
-            if row:
-                jid = row["id"]
+            if not created:
                 status = inputs.get("status")
                 resume_path = inputs.get("resume_path")
                 if status or resume_path:
@@ -546,20 +544,15 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                         "UPDATE job_postings SET status = COALESCE($2, status), resume_path = COALESCE($3, resume_path) WHERE id = $1",
                         jid, status, resume_path,
                     )
-                return json.dumps({"id": jid, "created": False})
-            jid = _new_id()
-            await pool.execute(
-                "INSERT INTO job_postings (id, company_id, title, link, source, status, resume_path) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-                jid, inputs["company_id"], inputs["title"], inputs.get("link"),
-                inputs.get("source"), inputs.get("status", "new"), inputs.get("resume_path"),
-            )
-            return json.dumps({"id": jid, "created": True})
+            return json.dumps({"id": jid, "created": created})
 
-        elif name == "update_stage":
+
+async def _tool_update_stage(inputs, pool):
             await pool.execute("UPDATE contacts SET stage = $2 WHERE id = $1", inputs["contact_id"], inputs["stage"])
             return json.dumps({"ok": True})
 
-        elif name == "log_interaction":
+
+async def _tool_log_interaction(inputs, pool):
             iid = _new_id()
             await pool.execute(
                 "INSERT INTO interactions (id, contact_id, direction, notes) VALUES ($1,$2,$3,$4)",
@@ -567,7 +560,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             )
             return json.dumps({"id": iid})
 
-        elif name == "log_content_post":
+
+async def _tool_log_content_post(inputs, pool):
             pid = _new_id()
             await pool.execute(
                 "INSERT INTO content_posts (id, content, impressions, engagements, comments) VALUES ($1,$2,$3,$4,$5)",
@@ -576,7 +570,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             )
             return json.dumps({"id": pid})
 
-        elif name == "search_notes":
+
+async def _tool_search_notes(inputs, pool):
             rows = await pool.fetch(
                 "SELECT id, category, title, url, content FROM notes "
                 "WHERE to_tsvector('english', COALESCE(title,'') || ' ' || COALESCE(content,'') || ' ' || COALESCE(url,'')) "
@@ -585,7 +580,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             )
             return json.dumps([dict(r) for r in rows])
 
-        elif name == "query_db":
+
+async def _tool_query_db(inputs, pool):
             sql = inputs["sql"].strip()
             sql_upper = sql.upper()
             forbidden = ("INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "TRUNCATE", "GRANT", "REVOKE")
@@ -594,7 +590,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             rows = await pool.fetch(sql)
             return json.dumps([dict(r) for r in rows], default=str)
 
-        elif name == "update_lead_status":
+
+async def _tool_update_lead_status(inputs, pool):
             row = await pool.fetchrow(
                 "UPDATE job_postings SET status = $2 WHERE id = $1 RETURNING id",
                 inputs["lead_id"], inputs["status"],
@@ -603,7 +600,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                 return json.dumps({"error": "Lead not found"})
             return json.dumps({"ok": True, "id": row["id"], "status": inputs["status"]})
 
-        elif name == "get_scraper_settings":
+
+async def _tool_get_scraper_settings(inputs, pool):
             from workers.scrapers.jobspy_scraper import DEFAULT_CONFIG, SOURCE_KEY
             defaults_by_source = {SOURCE_KEY: DEFAULT_CONFIG}
             source = inputs["source"]
@@ -618,7 +616,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             merged = {**defaults_by_source[source], **(cfg or {})}
             return json.dumps({"source": source, "config": merged, "is_default": False, "updated_at": str(row["updated_at"])})
 
-        elif name == "update_scraper_settings":
+
+async def _tool_update_scraper_settings(inputs, pool):
             from workers.scrapers.jobspy_scraper import DEFAULT_CONFIG, SOURCE_KEY
             defaults_by_source = {SOURCE_KEY: DEFAULT_CONFIG}
             source = inputs["source"]
@@ -636,7 +635,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             )
             return json.dumps({"ok": True, "source": source, "config": merged})
 
-        elif name == "read_notes":
+
+async def _tool_read_notes(inputs, pool):
             limit = inputs.get("limit", 20)
             rows = await pool.fetch(
                 "SELECT content, created_at FROM notes ORDER BY created_at DESC LIMIT $1",
@@ -645,7 +645,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             result = [{"content": r["content"], "date": str(r["created_at"])} for r in rows]
             return json.dumps(result, default=str)
 
-        elif name == "read_essays":
+
+async def _tool_read_essays(inputs, pool):
             limit = inputs.get("limit", 5)
             from config import settings
             essays = []
@@ -659,7 +660,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                 essays = [{"error": str(e)}]
             return json.dumps(essays)
 
-        elif name == "read_code_file":
+
+async def _tool_read_code_file(inputs, pool):
             from config import settings as app_settings
             rel_path = inputs.get("path", "").lstrip("/")
             base = Path(app_settings.aios_repo_dir).resolve()
@@ -678,7 +680,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                 result = {"path": rel_path, "content": numbered, "total_lines": len(lines), "shown": len(sliced)}
             return json.dumps(result)
 
-        elif name == "edit_code_file":
+
+async def _tool_edit_code_file(inputs, pool):
             from config import settings as app_settings
             rel_path = inputs.get("path", "").lstrip("/")
             base = Path(app_settings.aios_repo_dir).resolve()
@@ -701,7 +704,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                     result = {"ok": True, "path": rel_path, "message": "Edit applied"}
             return json.dumps(result)
 
-        elif name == "git_commit_and_push":
+
+async def _tool_git_commit_and_push(inputs, pool):
             import subprocess
             from config import settings as app_settings
 
@@ -747,7 +751,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                 result = {"error": str(e)}
             return json.dumps(result)
 
-        elif name == "list_code_files":
+
+async def _tool_list_code_files(inputs, pool):
             from config import settings as app_settings
             base = Path(app_settings.aios_repo_dir).resolve()
             subdir = inputs.get("subdir", "").lstrip("/")
@@ -764,7 +769,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                 result = {"files": files}
             return json.dumps(result)
 
-        elif name == "search_files":
+
+async def _tool_search_files(inputs, pool):
             import subprocess
             from config import settings as app_settings
             base = Path(app_settings.aios_repo_dir).resolve()
@@ -803,7 +809,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                     result = {"error": "Search timed out"}
             return json.dumps(result)
 
-        elif name == "add_outreach_contact":
+
+async def _tool_add_outreach_contact(inputs, pool):
             from services import okf_db
             okf_db.init()
             contact = okf_db.create_outreach_contact({
@@ -816,7 +823,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             })
             return json.dumps({"ok": True, "contact": contact})
 
-        elif name == "update_outreach_contact":
+
+async def _tool_update_outreach_contact(inputs, pool):
             from services import okf_db
             okf_db.init()
             match = okf_db.get_outreach_contact(inputs["contact_id"])
@@ -832,7 +840,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             })
             return json.dumps({"ok": True, "contact": updated})
 
-        elif name == "list_outreach_contacts":
+
+async def _tool_list_outreach_contacts(inputs, pool):
             from services import okf_db
             okf_db.init()
             contacts = okf_db.list_outreach_contacts(
@@ -841,17 +850,20 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             )
             return json.dumps(contacts, default=str)
 
-        elif name == "get_outreach_stats":
+
+async def _tool_get_outreach_stats(inputs, pool):
             from services import okf_db
             okf_db.init()
             return json.dumps(okf_db.get_outreach_stats())
 
-        elif name == "get_outreach_retro":
+
+async def _tool_get_outreach_retro(inputs, pool):
             from services import okf_db
             okf_db.init()
             return json.dumps(okf_db.get_weekly_retro(inputs.get("weeks", 4)), default=str)
 
-        elif name == "list_skills":
+
+async def _tool_list_skills(inputs, pool):
             skills_dir = Path(__file__).parent / "prompts" / "skills"
             skills = []
             if skills_dir.exists():
@@ -877,7 +889,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                     skills.append({"name": name_val, "description": desc_val, "tags": tags_val, "path": f"prompts/skills/{f.name}"})
             return json.dumps({"skills": skills})
 
-        elif name == "read_memory":
+
+async def _tool_read_memory(inputs, pool):
             from config import settings
             memory_dir = Path(settings.data_dir) / "memory"
             mem_type = inputs.get("type", "general")
@@ -903,7 +916,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                         sessions.append({"filename": f.name, "title": first_line.lstrip("# ")})
                 return json.dumps({"sessions": sessions})
 
-        elif name == "append_memory":
+
+async def _tool_append_memory(inputs, pool):
             from config import settings
             from datetime import datetime
             memory_dir = Path(settings.data_dir) / "memory"
@@ -922,7 +936,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                 fp.write(entry)
             return json.dumps({"ok": True, "appended_to": fname})
 
-        elif name == "save_session_summary":
+
+async def _tool_save_session_summary(inputs, pool):
             from config import settings
             from datetime import datetime
             memory_dir = Path(settings.data_dir) / "memory"
@@ -941,7 +956,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             (sessions_dir / fname).write_text(content)
             return json.dumps({"ok": True, "saved_to": f"sessions/{fname}"})
 
-        elif name == "semantic_search":
+
+async def _tool_semantic_search(inputs, pool):
             from services import embeddings as emb_svc
             query = inputs.get("query", "").strip()
             limit = inputs.get("limit", 8)
@@ -967,7 +983,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                         r.update(job_meta.get(r["source_id"], {}))
             return json.dumps({"results": results}, default=str)
 
-        elif name == "run_shell":
+
+async def _tool_run_shell(inputs, pool):
             import subprocess
             from config import settings as _s
             command = inputs.get("command", "").strip()
@@ -992,7 +1009,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             except Exception as exc:
                 return json.dumps({"ok": False, "error": str(exc)})
 
-        elif name == "fetch_url":
+
+async def _tool_fetch_url(inputs, pool):
             import httpx
             from bs4 import BeautifulSoup
             url = inputs.get("url", "").strip()
@@ -1008,9 +1026,47 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             except Exception as exc:
                 return json.dumps({"ok": False, "error": str(exc)})
 
-        else:
-            return json.dumps({"error": f"Unknown tool: {name}"})
 
+_TOOL_HANDLERS = {
+    "upsert_company": _tool_upsert_company,
+    "upsert_contact": _tool_upsert_contact,
+    "upsert_job_posting": _tool_upsert_job_posting,
+    "update_stage": _tool_update_stage,
+    "log_interaction": _tool_log_interaction,
+    "log_content_post": _tool_log_content_post,
+    "search_notes": _tool_search_notes,
+    "query_db": _tool_query_db,
+    "update_lead_status": _tool_update_lead_status,
+    "get_scraper_settings": _tool_get_scraper_settings,
+    "update_scraper_settings": _tool_update_scraper_settings,
+    "read_notes": _tool_read_notes,
+    "read_essays": _tool_read_essays,
+    "read_code_file": _tool_read_code_file,
+    "edit_code_file": _tool_edit_code_file,
+    "git_commit_and_push": _tool_git_commit_and_push,
+    "list_code_files": _tool_list_code_files,
+    "search_files": _tool_search_files,
+    "add_outreach_contact": _tool_add_outreach_contact,
+    "update_outreach_contact": _tool_update_outreach_contact,
+    "list_outreach_contacts": _tool_list_outreach_contacts,
+    "get_outreach_stats": _tool_get_outreach_stats,
+    "get_outreach_retro": _tool_get_outreach_retro,
+    "list_skills": _tool_list_skills,
+    "read_memory": _tool_read_memory,
+    "append_memory": _tool_append_memory,
+    "save_session_summary": _tool_save_session_summary,
+    "semantic_search": _tool_semantic_search,
+    "run_shell": _tool_run_shell,
+    "fetch_url": _tool_fetch_url,
+}
+
+
+async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
+    handler = _TOOL_HANDLERS.get(name)
+    if handler is None:
+        return json.dumps({"error": f"Unknown tool: {name}"})
+    try:
+        return await handler(inputs, pool)
     except Exception as e:
         return json.dumps({"error": str(e)})
 

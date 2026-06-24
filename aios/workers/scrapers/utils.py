@@ -1,12 +1,11 @@
 """Filters and DB sync helpers shared by all scrapers."""
 import re
-import secrets
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 import psycopg2
-import psycopg2.extras
 
+import intake
 from config import settings
 
 DEFENSE_KEYWORDS = [
@@ -123,89 +122,65 @@ class ScrapedJob:
     is_yc: bool = False
 
 
-def _new_id() -> str:
-    return secrets.token_hex(8)
+def _passes_filters(job: ScrapedJob) -> bool:
+    """The scraper filter chain: drop defense, high-travel, and non-CA-remote jobs."""
+    text = f"{job.description or ''} {job.job_title}"
+    if is_defense(text) or is_defense(job.company_name):
+        return False
+    if is_high_travel(job.description):
+        return False
+    if is_non_ca_remote(job.location):
+        return False
+    return True
 
 
-def sync_jobs_to_db(jobs: list[ScrapedJob]) -> dict:
-    conn = psycopg2.connect(settings.jobsearch_database_url)
+def sync_jobs_to_db(jobs: list[ScrapedJob], conn=None) -> dict:
+    """Run the filter chain and upsert surviving jobs via the intake module.
+
+    Pass ``conn`` to inject a psycopg2 connection (tests); otherwise one is
+    opened and closed here. Dedup of companies and postings lives in ``intake``;
+    this function owns only the filter chain and the on-existing update policy.
+    """
+    own_conn = conn is None
+    if own_conn:
+        conn = psycopg2.connect(settings.jobsearch_database_url)
     created = updated = skipped = 0
     try:
-        with conn:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute("SELECT id, name FROM companies")
-                company_map = {r["name"].lower(): r["id"] for r in cur.fetchall()}
-                cur.execute("SELECT id, company_id, title, link, status FROM job_postings")
-                posting_map = {
-                    f"{r['company_id']}::{(r['title'] or '').lower()}": r
-                    for r in cur.fetchall()
-                }
+        for job in jobs:
+            if not _passes_filters(job):
+                skipped += 1
+                continue
 
-            for job in jobs:
-                text = f"{job.description or ''} {job.job_title}"
-                if is_defense(text) or is_defense(job.company_name):
-                    skipped += 1
-                    continue
-                if is_high_travel(job.description):
-                    skipped += 1
-                    continue
-                if is_non_ca_remote(job.location):
-                    skipped += 1
-                    continue
+            source = "YC" if job.is_yc else job.source
+            company_id, _ = intake.find_or_create_company_sync(conn, job.company_name, job.website)
+            job_id, was_created, existing = intake.find_or_create_job_posting_sync(
+                conn, company_id, job.job_title,
+                link=job.job_link, source=source,
+                description=job.description, location=job.location,
+            )
 
-                source = "YC" if job.is_yc else job.source
-
-                company_id = company_map.get(job.company_name.lower())
-                if not company_id:
-                    company_id = _new_id()
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "INSERT INTO companies (id, name, website) VALUES (%s, %s, %s) "
-                            "ON CONFLICT (id) DO NOTHING",
-                            (company_id, job.company_name, job.website),
-                        )
-                    conn.commit()
-                    company_map[job.company_name.lower()] = company_id
-
-                key = f"{company_id}::{job.job_title.lower()}"
-                existing = posting_map.get(key)
-
-                if not existing:
-                    job_id = _new_id()
-                    with conn.cursor() as cur:
-                        from datetime import date, datetime, timezone
-                        cur.execute(
-                            "INSERT INTO job_postings "
-                            "(id, company_id, title, link, source, scraped_date, scraped_at, status, description, location) "
-                            "VALUES (%s, %s, %s, %s, %s, %s, %s, 'new', %s, %s)",
-                            (
-                                job_id, company_id, job.job_title, job.job_link,
-                                source, date.today().isoformat(),
-                                datetime.now(timezone.utc),
-                                job.description, job.location,
-                            ),
-                        )
-                    conn.commit()
-                    try:
-                        from tasks import embed_document
-                        embed_document.delay("job_posting", job_id, f"{job.job_title} {job.job_link or ''}")
-                    except Exception as _emb_exc:
-                        pass
-                    created += 1
-                elif existing["status"] != "new":
-                    skipped += 1
-                elif job.job_link and existing["link"] != job.job_link:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            "UPDATE job_postings SET link = %s, description = COALESCE(%s, description), "
-                            "location = COALESCE(%s, location) WHERE id = %s",
-                            (job.job_link, job.description, job.location, existing["id"]),
-                        )
-                    conn.commit()
-                    updated += 1
-                else:
-                    skipped += 1
+            if was_created:
+                try:
+                    from tasks import embed_document
+                    embed_document.delay("job_posting", job_id, f"{job.job_title} {job.job_link or ''}")
+                except Exception:
+                    pass
+                created += 1
+            elif existing["status"] != "new":
+                skipped += 1
+            elif job.job_link and existing["link"] != job.job_link:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE job_postings SET link = %s, description = COALESCE(%s, description), "
+                        "location = COALESCE(%s, location) WHERE id = %s",
+                        (job.job_link, job.description, job.location, job_id),
+                    )
+                conn.commit()
+                updated += 1
+            else:
+                skipped += 1
     finally:
-        conn.close()
+        if own_conn:
+            conn.close()
 
     return {"created": created, "updated": updated, "skipped": skipped}

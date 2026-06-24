@@ -26,6 +26,7 @@ async def embed_async(text: str) -> list[float]:
 
 
 async def upsert(pool: asyncpg.Pool, source_type: str, source_id: str, text: str) -> None:
+    """Async adapter (FastAPI): embed `text` and upsert into the embeddings table."""
     vec = await embed_async(text)
     eid = secrets.token_hex(8)
     await pool.execute(
@@ -38,6 +39,31 @@ async def upsert(pool: asyncpg.Pool, source_type: str, source_id: str, text: str
         """,
         eid, source_type, source_id, text[:4000], _vec_str(vec),
     )
+
+
+# psycopg2 paramstyle differs from asyncpg, so the SQL string can't be literally
+# shared; the embeddings-table contract (columns, conflict key) lives here once.
+_UPSERT_SQL_SYNC = """
+    INSERT INTO embeddings (id, source_type, source_id, chunk_text, embedding)
+    VALUES (%s, %s, %s, %s, %s::vector)
+    ON CONFLICT (source_type, source_id)
+    DO UPDATE SET chunk_text = EXCLUDED.chunk_text,
+                  embedding  = EXCLUDED.embedding
+"""
+
+
+def upsert_sync(conn, source_type: str, source_id: str, text: str) -> None:
+    """Sync adapter (Celery): embed `text` and upsert it using a caller-provided
+    psycopg2 connection. The caller owns the connection lifecycle so a backfill
+    loop can reuse one connection across many rows."""
+    vec = embed_sync(text)
+    eid = secrets.token_hex(8)
+    with conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                _UPSERT_SQL_SYNC,
+                (eid, source_type, source_id, text[:4000], _vec_str(vec)),
+            )
 
 
 async def search(

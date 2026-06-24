@@ -1,5 +1,3 @@
-import json
-import secrets
 from datetime import datetime
 from typing import Callable
 
@@ -67,19 +65,8 @@ def process_event(event_id: str) -> None:
 
 @celery_app.task(name="events.run_scheduled")
 def run_scheduled(event_type: str) -> None:
-    eid = secrets.token_hex(8)
-    with SyncSession() as session:
-        session.add(
-            OsEvent(
-                id=eid,
-                source="schedule",
-                type=event_type,
-                payload={},
-                status="pending",
-            )
-        )
-        session.commit()
-    process_event.delay(eid)
+    from events import emit_sync
+    emit_sync(source="schedule", type=event_type)
 
 
 # ── OKF: proposal generation ──────────────────────────────────────────────────
@@ -194,38 +181,18 @@ celery_app.conf.beat_schedule = {
 @celery_app.task(name="embed.document")
 def embed_document(source_type: str, source_id: str, text: str) -> None:
     """Embed a single document and upsert into the embeddings table."""
-    import secrets as _secrets
-    from services.embeddings import embed_sync, _vec_str
+    import psycopg2
+    from services.embeddings import upsert_sync
 
     if not text.strip():
         return
 
+    conn = psycopg2.connect(settings.jobsearch_database_url)
     try:
-        vec = embed_sync(text)
+        upsert_sync(conn, source_type, source_id, text)
     except Exception as e:
         # Don't crash the task queue if embeddings fail (e.g. no API key)
         print(f"embed_document failed for {source_type}/{source_id}: {e}")
-        return
-
-    vec_str = _vec_str(vec)
-    eid = _secrets.token_hex(8)
-
-    # Use sync psycopg2 connection (same pattern as Celery SyncSession)
-    import psycopg2
-    conn = psycopg2.connect(settings.jobsearch_database_url)
-    try:
-        with conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO embeddings (id, source_type, source_id, chunk_text, embedding)
-                    VALUES (%s, %s, %s, %s, %s::vector)
-                    ON CONFLICT (source_type, source_id)
-                    DO UPDATE SET chunk_text = EXCLUDED.chunk_text,
-                                  embedding  = EXCLUDED.embedding
-                    """,
-                    (eid, source_type, source_id, text[:4000], vec_str),
-                )
     finally:
         conn.close()
 
@@ -234,8 +201,7 @@ def embed_document(source_type: str, source_id: str, text: str) -> None:
 def embed_backfill() -> dict:
     """Backfill embeddings for all existing notes and job postings."""
     import psycopg2
-    import secrets as _secrets
-    from services.embeddings import embed_sync, _vec_str
+    from services.embeddings import upsert_sync
 
     conn = psycopg2.connect(settings.jobsearch_database_url)
     counts = {"notes": 0, "jobs": 0, "errors": 0}
@@ -250,19 +216,7 @@ def embed_backfill() -> dict:
             if not text.strip():
                 continue
             try:
-                vec = embed_sync(text)
-                eid = _secrets.token_hex(8)
-                with conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            INSERT INTO embeddings (id, source_type, source_id, chunk_text, embedding)
-                            VALUES (%s, 'note', %s, %s, %s::vector)
-                            ON CONFLICT (source_type, source_id) DO UPDATE
-                            SET chunk_text = EXCLUDED.chunk_text, embedding = EXCLUDED.embedding
-                            """,
-                            (eid, note_id, text[:4000], _vec_str(vec)),
-                        )
+                upsert_sync(conn, "note", note_id, text)
                 counts["notes"] += 1
             except Exception as e:
                 counts["errors"] += 1
@@ -284,19 +238,7 @@ def embed_backfill() -> dict:
             if not text.strip():
                 continue
             try:
-                vec = embed_sync(text)
-                eid = _secrets.token_hex(8)
-                with conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            INSERT INTO embeddings (id, source_type, source_id, chunk_text, embedding)
-                            VALUES (%s, 'job_posting', %s, %s, %s::vector)
-                            ON CONFLICT (source_type, source_id) DO UPDATE
-                            SET chunk_text = EXCLUDED.chunk_text, embedding = EXCLUDED.embedding
-                            """,
-                            (eid, job_id, text[:4000], _vec_str(vec)),
-                        )
+                upsert_sync(conn, "job_posting", job_id, text)
                 counts["jobs"] += 1
             except Exception as e:
                 counts["errors"] += 1
@@ -312,9 +254,8 @@ def embed_backfill() -> dict:
 def embed_vault() -> dict:
     """Embed all markdown files in the vault into the embeddings table."""
     from pathlib import Path
-    from services.embeddings import embed_sync, _vec_str
-    import secrets as _secrets
     import psycopg2
+    from services.embeddings import upsert_sync
 
     vault_dir = Path(settings.vault_dir)
     if not vault_dir.exists():
@@ -331,19 +272,7 @@ def embed_vault() -> dict:
             if not text:
                 continue
             try:
-                vec = embed_sync(text)
-                eid = _secrets.token_hex(8)
-                with conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            INSERT INTO embeddings (id, source_type, source_id, chunk_text, embedding)
-                            VALUES (%s, 'vault', %s, %s, %s::vector)
-                            ON CONFLICT (source_type, source_id) DO UPDATE
-                            SET chunk_text = EXCLUDED.chunk_text, embedding = EXCLUDED.embedding
-                            """,
-                            (eid, rel, text[:4000], _vec_str(vec)),
-                        )
+                upsert_sync(conn, "vault", rel, text)
                 counts["files"] += 1
             except Exception as e:
                 counts["errors"] += 1
