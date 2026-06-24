@@ -18,7 +18,6 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 }
 import Home from './pages/Home'
 import EventsPage from './pages/Events'
-import Chat from './pages/JobSearch/Chat'
 import Pipeline from './pages/JobSearch/Pipeline'
 import Leads from './pages/JobSearch/Leads'
 import Applications from './pages/JobSearch/Applications'
@@ -48,7 +47,6 @@ export default function App() {
           <Route path="ideas" element={<Ideas />} />
           <Route path="jobsearch" element={<JobSearchLayout />}>
             <Route index element={<Navigate to="pipeline" replace />} />
-            <Route path="chat" element={<Chat />} />
             <Route path="pipeline" element={<Pipeline />} />
             <Route path="leads" element={<Leads />} />
             <Route path="applications" element={<Applications />} />

@@ -150,8 +150,9 @@ const PERSONAL_SHORTCUTS = [
   { key: 'Option+5', action: 'Writing' },
   { key: 'Option+6', action: 'Daily Log' },
   { key: 'Option+7', action: 'Look' },
-  { key: 'Option+C', action: 'Chat with Ima' },
-  { key: 'Option+M', action: 'Voice input (mic)' },
+  { key: 'Option+8', action: 'Finances' },
+  { key: 'Option+9', action: 'Knowledge' },
+  { key: 'Option+I', action: 'Toggle Ima' },
   { key: ']', action: 'Toggle sidebar' },
   { key: '?', action: 'Show this help' },
 ]
@@ -161,8 +162,7 @@ const BUSINESS_SHORTCUTS = [
   { key: 'Option+2', action: 'Revenue' },
   { key: 'Option+3', action: 'Outreach' },
   { key: 'Option+4', action: 'Events' },
-  { key: 'Option+C', action: 'Proposals' },
-  { key: 'Option+M', action: 'Voice input (mic)' },
+  { key: 'Option+I', action: 'Toggle Ima' },
   { key: ']', action: 'Toggle sidebar' },
   { key: '?', action: 'Show this help' },
 ]
@@ -696,6 +696,17 @@ export default function Shell() {
     onToggleIma: () => setImaOpen(o => !o),
     isOkf: IS_OKF,
   })
+
+  useEffect(() => {
+    function onEsc(e: KeyboardEvent) {
+      if (e.key === 'Escape' && imaOpen) {
+        setImaOpen(false)
+        setImaPinned(false)
+      }
+    }
+    window.addEventListener('keydown', onEsc)
+    return () => window.removeEventListener('keydown', onEsc)
+  }, [imaOpen])
 
   return (
     <div className="flex flex-col h-screen overflow-hidden">

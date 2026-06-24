@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
-const PERSONAL_ROUTES = ['/', '/events', '/ideas', '/jobsearch/chat', '/writing', '/daily-log', '/look']
+const PERSONAL_ROUTES = ['/', '/events', '/ideas', '/jobsearch', '/writing', '/daily-log', '/look', '/finances', '/vault']
 const BUSINESS_ROUTES = ['/proposals', '/revenue', '/outreach', '/okf-events']
 
 // Use e.code (physical key position) so Option+1 on Mac fires even when e.key = '¡'
@@ -17,7 +17,6 @@ function letterFromCode(code: string): string | null {
 
 export function useKeyboardShortcuts(opts: {
   onToggleSidebar: () => void
-  onToggleVoice?: () => void
   onShowShortcuts?: () => void
   onToggleIma?: () => void
   isOkf: boolean
@@ -48,20 +47,6 @@ export function useKeyboardShortcuts(opts: {
 
         const letter = letterFromCode(e.code)
 
-        // Option/Alt+C: go to chat
-        if (letter === 'c') {
-          e.preventDefault()
-          navigate(opts.isOkf ? '/proposals' : '/jobsearch/chat')
-          return
-        }
-
-        // Option/Alt+M: toggle voice input
-        if (letter === 'm' && opts.onToggleVoice) {
-          e.preventDefault()
-          opts.onToggleVoice()
-          return
-        }
-
         // Option/Alt+I: toggle Ima drawer
         if (letter === 'i' && opts.onToggleIma) {
           e.preventDefault()
@@ -80,5 +65,5 @@ export function useKeyboardShortcuts(opts: {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigate, opts.isOkf, opts.onToggleSidebar, opts.onToggleVoice, opts.onShowShortcuts, opts.onToggleIma])
+  }, [navigate, opts.isOkf, opts.onToggleSidebar, opts.onShowShortcuts, opts.onToggleIma])
 }
