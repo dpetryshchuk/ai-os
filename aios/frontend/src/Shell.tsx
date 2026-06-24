@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ClipboardList,
   Clock,
+  Copy,
   FileText,
   Home,
   Lightbulb,
@@ -500,6 +501,34 @@ function ImaPanel({
     setShowHistory(false)
   }
 
+  const [copied, setCopied] = useState(false)
+  function copyTrace() {
+    const lines: string[] = []
+    for (const msg of messages) {
+      if (msg.role === 'user') {
+        lines.push(`[User]\n${msg.text}`)
+      } else if (!msg.thinking) {
+        const parts = msg.parts ?? [{ type: 'text' as const, content: msg.text }]
+        for (const part of parts) {
+          if (part.type === 'text' && part.content.trim()) {
+            lines.push(`[Ima]\n${part.content.trim()}`)
+          } else if (part.type === 'tool') {
+            const c = part.call
+            lines.push(
+              `[Tool: ${c.toolName}]\nArgs: ${JSON.stringify(c.args, null, 2)}${
+                c.result !== undefined ? `\nResult: ${JSON.stringify(c.result, null, 2)}` : ''
+              }`
+            )
+          }
+        }
+      }
+    }
+    navigator.clipboard.writeText(lines.join('\n\n---\n\n')).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+
   // Auto-focus textarea when panel mounts (i.e. when Ima opens)
   useEffect(() => {
     textareaRef.current?.focus()
@@ -518,6 +547,14 @@ function ImaPanel({
         </button>
         <span className="text-xs font-semibold">Ima</span>
         <div className="flex items-center gap-1">
+          <button
+            onClick={copyTrace}
+            title={copied ? 'Copied!' : 'Copy trace'}
+            disabled={messages.length === 0}
+            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30 disabled:pointer-events-none"
+          >
+            <Copy className={cn('size-3.5', copied && 'text-green-500')} />
+          </button>
           <button
             onClick={newChat}
             title="New chat"
