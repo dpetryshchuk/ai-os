@@ -14,6 +14,10 @@ import Freewrite from './pages/Writing/Freewrite'
 import DailyLog from './pages/DailyLog'
 import Ideas from './pages/Ideas'
 import Look from './pages/Look'
+import Proposals from './pages/Business/Proposals'
+import Revenue from './pages/Business/Revenue'
+import Outreach from './pages/Business/Outreach'
+import OkfEvents from './pages/Business/OkfEvents'
 
 export default function App() {
   return (
@@ -38,6 +42,10 @@ export default function App() {
           </Route>
           <Route path="daily-log" element={<DailyLog />} />
           <Route path="look" element={<Look />} />
+          <Route path="proposals" element={<Proposals />} />
+          <Route path="revenue" element={<Revenue />} />
+          <Route path="outreach" element={<Outreach />} />
+          <Route path="okf-events" element={<OkfEvents />} />
         </Route>
       </Routes>
     </BrowserRouter>

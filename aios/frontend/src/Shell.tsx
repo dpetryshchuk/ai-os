@@ -7,9 +7,11 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   FileText,
   Home,
   Lightbulb,
+  Megaphone,
   Menu,
   MessageSquare,
   PenLine,
@@ -21,6 +23,8 @@ import {
   Zap,
 } from 'lucide-react'
 import { cn } from './lib/utils'
+
+const IS_OKF = typeof window !== 'undefined' && window.location.hostname.includes('onekeyflow')
 
 type WorkflowSection = {
   label: string
@@ -57,6 +61,13 @@ const WORKFLOWS: WorkflowSection[] = [
   },
   { label: 'Daily Log', path: '/daily-log', icon: CalendarDays },
   { label: 'Look', path: '/look', icon: Sparkles },
+]
+
+const BUSINESS: WorkflowSection[] = [
+  { label: 'Proposals', path: '/proposals', icon: ClipboardList },
+  { label: 'Revenue', path: '/revenue', icon: TrendingUp },
+  { label: 'Outreach', path: '/outreach', icon: Megaphone },
+  { label: 'Events', path: '/okf-events', icon: Activity },
 ]
 
 const COLLAPSED_KEY = 'aios:sidebar-collapsed'
@@ -124,6 +135,15 @@ function NavItem({
 
 export default function Shell() {
   const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (IS_OKF) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [])
+
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(COLLAPSED_KEY) === '1'
@@ -179,13 +199,8 @@ export default function Shell() {
           </button>
         </div>
         <nav className="flex-1 overflow-y-auto p-2 flex flex-col gap-0.5">
-          {WORKFLOWS.map((item) => (
-            <NavItem
-              key={item.path}
-              item={item}
-              collapsed={collapsed}
-              onNavigate={() => setOpen(false)}
-            />
+          {(IS_OKF ? BUSINESS : WORKFLOWS).map((item) => (
+            <NavItem key={item.path} item={item} collapsed={collapsed} onNavigate={() => setOpen(false)} />
           ))}
         </nav>
       </aside>
