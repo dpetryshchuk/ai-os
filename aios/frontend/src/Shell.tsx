@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import {
   Activity,
@@ -15,6 +15,9 @@ import {
   Menu,
   MessageSquare,
   PenLine,
+  Pin,
+  PinOff,
+  Send,
   Sparkles,
   Target,
   TrendingUp,
@@ -22,6 +25,8 @@ import {
   X,
   Zap,
 } from 'lucide-react'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import { cn } from './lib/utils'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
@@ -202,9 +207,197 @@ function ShortcutHelperModal({ onClose, isOkf }: { onClose: () => void; isOkf: b
   )
 }
 
+// ── Ima global chat panel ──────────────────────────────────────────────────
+
+const IMA_STREAM_URL = '/api/jobsearch/agents/stream'
+
+const IMA_THINKING = ['Thinking...', 'Working...', 'Looking it up...', 'On it...']
+
+interface ImaMsg {
+  id: string
+  role: 'user' | 'agent'
+  text: string
+  thinking?: boolean
+}
+
+function ImaMsgBubble({ msg }: { msg: ImaMsg }) {
+  if (msg.role === 'user') {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[85%] bg-muted rounded-2xl rounded-tr-sm px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
+          {msg.text}
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[85%] rounded-2xl rounded-tl-sm px-3 py-2 text-sm leading-relaxed border border-border bg-card">
+        {msg.thinking ? (
+          <span className="text-muted-foreground animate-pulse text-xs">{msg.text}</span>
+        ) : (
+          <div
+            className="prose prose-sm prose-neutral max-w-none"
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(msg.text) as string) }}
+          />
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ImaPanel({ onClose, onTogglePin, pinned }: { onClose: () => void; onTogglePin: () => void; pinned: boolean }) {
+  const [messages, setMessages] = useState<ImaMsg[]>([])
+  const [input, setInput] = useState('')
+  const [streaming, setStreaming] = useState(false)
+  const endRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const historyRef = useRef<{ role: string; content: string }[]>([])
+  const thinkingIdxRef = useRef(0)
+
+  const updateMsg = useCallback((id: string, up: (m: ImaMsg) => ImaMsg) => {
+    setMessages(prev => prev.map(m => m.id === id ? up(m) : m))
+  }, [])
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  const send = useCallback(async () => {
+    const text = input.trim()
+    if (!text || streaming) return
+    const uid = `u${Date.now()}`, aid = `a${Date.now()}`
+    setMessages(prev => [...prev,
+      { id: uid, role: 'user', text },
+      { id: aid, role: 'agent', text: IMA_THINKING[0], thinking: true },
+    ])
+    setInput('')
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
+    setStreaming(true)
+    const iv = setInterval(() => {
+      thinkingIdxRef.current = (thinkingIdxRef.current + 1) % IMA_THINKING.length
+      updateMsg(aid, m => m.thinking ? { ...m, text: IMA_THINKING[thinkingIdxRef.current] } : m)
+    }, 700)
+    historyRef.current = [...historyRef.current, { role: 'user', content: text }]
+    try {
+      const res = await fetch(IMA_STREAM_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: historyRef.current }),
+      })
+      clearInterval(iv)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      let textContent = '', buffer = '', started = false
+      const reader = res.body!.getReader(), dec = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += dec.decode(value, { stream: true })
+        const parts = buffer.split('\n\n'); buffer = parts.pop() ?? ''
+        for (const part of parts) {
+          const line = part.trim()
+          if (!line.startsWith('data: ')) continue
+          const t = line.slice(6).trim()
+          if (!t || t === '[DONE]') continue
+          let chunk: { type?: string; payload?: Record<string, unknown> }
+          try { chunk = JSON.parse(t) } catch { continue }
+          if (chunk.type === 'text-delta' && chunk.payload?.text) {
+            textContent += chunk.payload.text as string
+            if (!started) { started = true; updateMsg(aid, m => ({ ...m, text: textContent, thinking: false })) }
+            else updateMsg(aid, m => ({ ...m, text: textContent }))
+          }
+        }
+      }
+      updateMsg(aid, m => m.thinking ? { ...m, text: textContent || '...', thinking: false } : m)
+      if (textContent) historyRef.current = [...historyRef.current, { role: 'assistant', content: textContent }]
+    } catch (err) {
+      clearInterval(iv)
+      const msg = err instanceof Error ? err.message : 'Error'
+      updateMsg(aid, m => ({ ...m, text: `Error: ${msg}`, thinking: false }))
+      historyRef.current = historyRef.current.slice(0, -1)
+    } finally { setStreaming(false) }
+  }, [input, streaming, updateMsg])
+
+  function handleKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+  }
+
+  function adjustHeight() {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 160) + 'px'
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-background border-l border-border">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
+        <span className="text-sm font-semibold tracking-tight">Ima</span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onTogglePin}
+            title={pinned ? 'Unpin' : 'Pin to side'}
+            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            {pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
+          </button>
+          <button
+            onClick={onClose}
+            title="Close Ima"
+            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <X className="size-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-3 py-4">
+        {messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-2">
+            <div className="size-8 rounded-full bg-foreground/10 flex items-center justify-center">
+              <div className="size-2.5 rounded-full bg-foreground/60" />
+            </div>
+            <p className="text-sm font-medium">Ask Ima anything</p>
+            <p className="text-xs text-muted-foreground">Accessible from every page</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {messages.map(m => <ImaMsgBubble key={m.id} msg={m} />)}
+            <div ref={endRef} />
+          </div>
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="border-t border-border px-3 py-2 shrink-0">
+        <div className="flex gap-1.5 items-end">
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={e => { setInput(e.target.value); adjustHeight() }}
+            onKeyDown={handleKey}
+            placeholder="Ask Ima..."
+            rows={1}
+            className="flex-1 resize-none rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30 min-h-[36px] max-h-[160px] transition-all"
+          />
+          <button
+            onClick={send}
+            disabled={streaming || !input.trim()}
+            className="shrink-0 flex items-center justify-center size-9 rounded-lg bg-foreground text-background disabled:opacity-40 hover:opacity-80 transition-opacity"
+          >
+            <Send size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Shell() {
   const [open, setOpen] = useState(false)
   const [showShortcuts, setShowShortcuts] = useState(false)
+  const [imaOpen, setImaOpen] = useState(false)
+  const [imaPinned, setImaPinned] = useState(false)
 
   useEffect(() => {
     if (IS_OKF) {
@@ -226,12 +419,14 @@ export default function Shell() {
   useKeyboardShortcuts({
     onToggleSidebar: () => setCollapsed(c => !c),
     onShowShortcuts: () => setShowShortcuts(s => !s),
+    onToggleIma: () => setImaOpen(o => !o),
     isOkf: IS_OKF,
   })
 
   return (
     <div className="flex h-screen overflow-hidden">
       {showShortcuts && <ShortcutHelperModal onClose={() => setShowShortcuts(false)} isOkf={IS_OKF} />}
+
       {/* Mobile backdrop */}
       {open && (
         <div
@@ -241,6 +436,14 @@ export default function Shell() {
           tabIndex={0}
           aria-label="Close menu"
           onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setOpen(false)}
+        />
+      )}
+
+      {/* Ima drawer backdrop (mobile/narrow) */}
+      {imaOpen && !imaPinned && (
+        <div
+          className="fixed inset-0 z-40 bg-black/20 md:hidden"
+          onClick={() => setImaOpen(false)}
         />
       )}
 
@@ -282,21 +485,62 @@ export default function Shell() {
         </nav>
       </aside>
 
-      {/* Main */}
-      <main className="flex-1 overflow-y-auto flex flex-col min-w-0">
-        {/* Mobile top bar */}
-        <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-border bg-background md:hidden">
-          <button
-            onClick={() => setOpen(true)}
-            className="text-muted-foreground hover:text-foreground"
-            aria-label="Open menu"
-          >
-            <Menu className="size-5" />
-          </button>
-          <span className="text-sm font-semibold tracking-tight">AI OS</span>
+      {/* Main content + right panel wrapper */}
+      <div className="flex-1 flex min-w-0 overflow-hidden">
+        <main className="flex-1 overflow-y-auto flex flex-col min-w-0">
+          {/* Mobile top bar */}
+          <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-border bg-background md:hidden">
+            <button
+              onClick={() => setOpen(true)}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Open menu"
+            >
+              <Menu className="size-5" />
+            </button>
+            <span className="text-sm font-semibold tracking-tight">AI OS</span>
+          </div>
+
+          {/* Desktop top bar with Ima trigger */}
+          <div className="hidden md:flex items-center justify-end px-4 py-1.5 border-b border-border bg-background shrink-0">
+            <button
+              onClick={() => setImaOpen(o => !o)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors',
+                imaOpen
+                  ? 'bg-foreground text-background'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted border border-border',
+              )}
+            >
+              <div className="size-1.5 rounded-full bg-green-400" />
+              Ima
+            </button>
+          </div>
+
+          <Outlet />
+        </main>
+
+        {/* Ima panel — pinned (in-flow) */}
+        {imaOpen && imaPinned && (
+          <div className="w-[380px] shrink-0 flex flex-col">
+            <ImaPanel
+              onClose={() => { setImaOpen(false); setImaPinned(false) }}
+              onTogglePin={() => setImaPinned(false)}
+              pinned={true}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Ima panel — drawer (fixed overlay) */}
+      {imaOpen && !imaPinned && (
+        <div className="fixed right-0 top-0 bottom-0 z-50 w-[380px] shadow-2xl flex flex-col">
+          <ImaPanel
+            onClose={() => setImaOpen(false)}
+            onTogglePin={() => setImaPinned(true)}
+            pinned={false}
+          />
         </div>
-        <Outlet />
-      </main>
+      )}
     </div>
   )
 }

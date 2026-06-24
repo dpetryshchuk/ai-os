@@ -19,6 +19,7 @@ export function useKeyboardShortcuts(opts: {
   onToggleSidebar: () => void
   onToggleVoice?: () => void
   onShowShortcuts?: () => void
+  onToggleIma?: () => void
   isOkf: boolean
 }) {
   const navigate = useNavigate()
@@ -60,6 +61,13 @@ export function useKeyboardShortcuts(opts: {
           opts.onToggleVoice()
           return
         }
+
+        // Option/Alt+I: toggle Ima drawer
+        if (letter === 'i' && opts.onToggleIma) {
+          e.preventDefault()
+          opts.onToggleIma()
+          return
+        }
       }
 
       // ] — toggle sidebar (no modifiers)
@@ -72,5 +80,5 @@ export function useKeyboardShortcuts(opts: {
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigate, opts.isOkf, opts.onToggleSidebar, opts.onToggleVoice, opts.onShowShortcuts])
+  }, [navigate, opts.isOkf, opts.onToggleSidebar, opts.onToggleVoice, opts.onShowShortcuts, opts.onToggleIma])
 }
