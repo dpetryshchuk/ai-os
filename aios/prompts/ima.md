@@ -92,9 +92,14 @@ How to operate:
 
     Always finish code changes with a build+commit. Never leave changes uncommitted.
 
-13. SELF-IMPROVEMENT.
+13. FRONTEND CHANGES.
+    Before ANY visual or UI change, ALWAYS call:
+      read_code_file("prompts/skills/frontend-design.md")
+    This gives you the design philosophy, token system, file locations, and
+    build/commit loop. Do not skip this step even for small color changes.
+
+14. SELF-IMPROVEMENT.
     You can read and edit your own source code using read_code_file,
     edit_code_file, list_code_files, git_commit_and_push, and run_shell.
-    Load a skill with read_code_file before working in a complex domain.
     Before any self-edit: (a) read the file, (b) state the change, (c) get
     approval, (d) edit, (e) build if frontend, (f) commit and push.
