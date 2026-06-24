@@ -1,8 +1,15 @@
 """SD-area job scraper using python-jobspy (Indeed + LinkedIn)."""
+import json
 import logging
 import re
+import smtplib
 from datetime import date, datetime, timezone
+from email.mime.text import MIMEText
 
+import psycopg2
+import psycopg2.extras
+
+from config import settings
 from .utils import ScrapedJob, is_defense, sync_jobs_to_db
 
 logger = logging.getLogger(__name__)
@@ -41,13 +48,8 @@ DEFAULT_CONFIG = {
 
 def _load_config() -> dict:
     """Load the jobspy config from scraper_settings; fall back to DEFAULT_CONFIG."""
-    import json
-    import psycopg2
-    import psycopg2.extras
-    from config import settings as app_settings
-
     try:
-        conn = psycopg2.connect(app_settings.jobsearch_database_url)
+        conn = psycopg2.connect(settings.jobsearch_database_url)
         try:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute("SELECT config FROM scraper_settings WHERE source = %s", (SOURCE_KEY,))
@@ -76,7 +78,7 @@ def _clean(val) -> str | None:
 
 
 def _scrape_once(site: str, term: str, location: str, cfg: dict) -> list[ScrapedJob]:
-    from jobspy import scrape_jobs
+    from jobspy import scrape_jobs  # heavy optional dependency — import deferred
     area_keywords = cfg["area_keywords"]
     skip_titles = cfg["skip_titles"]
 
@@ -151,12 +153,9 @@ def run(payload: dict, session) -> dict:
 
 
 def _maybe_notify(count: int, new_jobs: list[ScrapedJob]) -> None:
-    from config import settings
     if not settings.notify_email or not settings.smtp_user:
         return
     try:
-        import smtplib
-        from email.mime.text import MIMEText
         lines = [f"• {j.job_title} @ {j.company_name} — {j.location or 'SD area'}" for j in new_jobs[:20]]
         body = f"{count} new SD-area job(s) found:\n\n" + "\n".join(lines)
         msg = MIMEText(body)

@@ -4,9 +4,10 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+from config import settings
+
 
 def _db_path() -> Path:
-    from config import settings
     return Path(settings.data_dir) / "sessions.db"
 
 

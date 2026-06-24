@@ -37,7 +37,7 @@ async def close_daily_log_pool() -> None:
 
 
 async def get_daily_log_pool() -> asyncpg.Pool:
-    return _daily_log_pool  # type: ignore[return-value]
+    return _daily_log_pool 
 
 
 # Sync SQLAlchemy session (used by Celery workers for os_events)

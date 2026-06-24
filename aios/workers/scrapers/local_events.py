@@ -6,6 +6,7 @@ Normalizes into a common event schema, deduplicates, and saves to DB.
 
 import hashlib
 import json
+import os
 import re
 from datetime import datetime, timedelta
 from typing import Optional
@@ -137,8 +138,6 @@ def _fetch_feed(feed: dict, now: datetime, cutoff: datetime) -> list[dict]:
 
 def _parse_jsonld_events(html: str, feed: dict, now: datetime, cutoff: datetime) -> list[dict]:
     """Parse JSON-LD Event/ItemList blocks from HTML (Allevents.in pattern)."""
-    import json as _json
-
     scripts = re.findall(
         r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>',
         html, re.DOTALL,
@@ -146,7 +145,7 @@ def _parse_jsonld_events(html: str, feed: dict, now: datetime, cutoff: datetime)
     raw_events = []
     for s in scripts:
         try:
-            data = _json.loads(s)
+            data = json.loads(s)
             if isinstance(data, dict) and data.get("@type") == "ItemList":
                 for item in data.get("itemListElement", []):
                     ev = item.get("item", {})
@@ -335,9 +334,6 @@ def _dedup_key(event: dict) -> str:
 
 def _save_brief(events: list[dict], vault_dir: str):
     """Save a markdown brief to the vault."""
-    import os
-    from datetime import datetime
-
     now = datetime.utcnow()
     week_end = now + timedelta(days=7)
     filename = f"events-{now.strftime('%Y-%m-%d')}.md"

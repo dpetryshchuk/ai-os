@@ -3,7 +3,7 @@ import json
 import os
 import secrets
 import shutil
-from datetime import date as _today_date
+from datetime import date as _today_date, timedelta as _timedelta
 
 import asyncpg
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -13,6 +13,7 @@ from workers.scrapers.jobspy_scraper import DEFAULT_CONFIG as JOBSPY_DEFAULTS, S
 
 import db
 from agent import agentic_stream
+from tasks import embed_document, process_event
 from config import settings
 from services import embeddings as emb_svc
 from schemas import (
@@ -192,9 +193,8 @@ async def get_retro(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> Retr
     )
 
     today_count = sum(r["count"] for r in daily if str(r["date"]) == str(_today_date.today()))
-    import datetime as _dt
     week_start = _today_date.today()
-    week_start = week_start - _dt.timedelta(days=week_start.weekday())
+    week_start = week_start - _timedelta(days=week_start.weekday())
     week_count = sum(r["count"] for r in daily if r["date"] >= week_start)
 
     outreached = funnel_rows["outreached"] or 0
@@ -281,7 +281,6 @@ async def create_note(body: NoteCreate, pool: asyncpg.Pool = Depends(db.get_jobs
         "RETURNING id, category, title, url, content, created_at",
         nid, body.category, body.title, body.url, body.content,
     )
-    from tasks import embed_document
     embed_document.delay("note", nid, f"{body.title or ''} {body.content or ''}".strip())
     return NoteResponse(note=NoteRow.model_validate(dict(row)))
 
@@ -301,7 +300,6 @@ async def update_note(note_id: str, body: NoteUpdate, pool: asyncpg.Pool = Depen
     if not row:
         raise HTTPException(404, "Note not found")
     note = NoteRow.model_validate(dict(row))
-    from tasks import embed_document
     embed_document.delay("note", note_id, f"{note.title or ''} {note.content or ''}".strip())
     return NoteResponse(note=note)
 
@@ -460,9 +458,7 @@ async def trigger_task(task_type: str, pool: asyncpg.Pool = Depends(db.get_jobse
     allowed = {"scrape.sd", "scrape.yc", "scrape.hn", "embed.backfill", "embed.vault"}
     if task_type not in allowed:
         raise HTTPException(400, f"Unknown task type: {task_type}")
-    import json, secrets as _s
-    from tasks import process_event
-    eid = _s.token_hex(8)
+    eid = secrets.token_hex(8)
     await pool.execute(
         "INSERT INTO os_events (id, source, type, payload) VALUES ($1,$2,$3,$4::jsonb)",
         eid, "ui", task_type, json.dumps({}),

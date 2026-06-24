@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from config import settings
+from tasks import embed_document
 
 router = APIRouter()
 
@@ -61,7 +62,6 @@ def save_file(path: str, body: FileSave):
     target.write_text(body.content)
     # Embed into vector search after save
     try:
-        from tasks import embed_document
         embed_document.delay("vault", path, body.content)
     except Exception:
         pass

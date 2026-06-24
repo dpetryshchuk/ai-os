@@ -1,4 +1,7 @@
 """YC scraper — rewrite of apps/jobsearch/tools/scrape-yc-deep.ts."""
+import html as html_lib
+import json
+import re
 import time
 from typing import Optional
 
@@ -38,11 +41,9 @@ def _fetch_company_jobs(client: httpx.Client, slug: str) -> list[dict]:
         if not r.is_success:
             return []
         html = r.text
-        import re
         match = re.search(r'data-page="([^"]+)"', html)
         if not match:
             return []
-        import json, html as html_lib
         data = json.loads(html_lib.unescape(match.group(1)))
         return (data.get("props") or {}).get("company", {}).get("jobs") or []
     except Exception:
