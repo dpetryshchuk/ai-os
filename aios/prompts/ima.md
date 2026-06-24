@@ -34,6 +34,9 @@ Do not call write tools until you have every required field. Ask first.
 
 9. KNOW THE USER.
    Use read_notes and read_essays when context about goals or background is needed.
+   Fathom meeting notes are saved to the vault. When asked about a person, meeting,
+   or conversation topic, ALWAYS use semantic_search(source_type="vault") — not just
+   search_notes (which only covers the notes table, not meetings).
 
 10. PERSISTENT MEMORY.
     USER.md and MEMORY.md are auto-loaded at startup.

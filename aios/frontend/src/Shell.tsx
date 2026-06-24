@@ -309,12 +309,10 @@ function ImaPanel({
   onClose,
   onTogglePin,
   pinned,
-  initialSession,
 }: {
   onClose: () => void
   onTogglePin: () => void
   pinned: boolean
-  initialSession?: { id: string; messages: Array<{ role: string; content: string }> } | null
 }) {
   const [messages, setMessages] = useState<ImaMsg[]>([])
   const [input, setInput] = useState('')
@@ -328,8 +326,6 @@ function ImaPanel({
   const sessionIdRef = useRef<string | null>(null)
   const exchangeCountRef = useRef(0)
   const currentDomain = IS_OKF ? 'business' : 'personal'
-  const otherDomain = IS_OKF ? 'https://home.dmytropetryshchuk.com' : 'https://onekeyflow.com'
-  const otherDomainLabel = IS_OKF ? '→ Personal' : '→ OKF'
 
   const updateMsg = useCallback((id: string, up: (m: ImaMsg) => ImaMsg) => {
     setMessages(prev => prev.map(m => m.id === id ? up(m) : m))
@@ -337,17 +333,6 @@ function ImaPanel({
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
-  useEffect(() => {
-    if (!initialSession) return
-    sessionIdRef.current = initialSession.id
-    const displayMsgs: ImaMsg[] = initialSession.messages.map((m, i) => ({
-      id: `loaded-${i}`,
-      role: m.role === 'user' ? 'user' : 'agent',
-      text: m.content,
-    }))
-    setMessages(displayMsgs)
-    historyRef.current = initialSession.messages
-  }, [initialSession])
 
   const send = useCallback(async () => {
     const text = input.trim()
@@ -673,14 +658,6 @@ function ImaPanel({
             </div>
             <div className="mt-1.5 flex items-center justify-between">
               <p className="text-[10px] text-muted-foreground">Enter to send · Shift+Enter for newline</p>
-              {sessionIdRef.current && (
-                <a
-                  href={`${otherDomain}?session=${sessionIdRef.current}`}
-                  className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors"
-                >
-                  {otherDomainLabel}
-                </a>
-              )}
             </div>
           </div>
         </>
@@ -694,7 +671,6 @@ export default function Shell() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [imaOpen, setImaOpen] = useState(false)
   const [imaPinned, setImaPinned] = useState(false)
-  const [preloadedSession, setPreloadedSession] = useState<{ id: string; messages: Array<{ role: string; content: string }> } | null>(null)
 
   useEffect(() => {
     if (IS_OKF) {
@@ -704,22 +680,6 @@ export default function Shell() {
     }
   }, [])
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const sessionParam = params.get('session')
-    if (sessionParam) {
-      fetch(`/api/sessions/${sessionParam}`)
-        .then(r => r.json())
-        .then(d => {
-          if (d.ok && d.session?.messages?.length > 0) {
-            setPreloadedSession({ id: d.session.id, messages: d.session.messages })
-            setImaOpen(true)
-          }
-        })
-        .catch(() => null)
-      window.history.replaceState({}, '', window.location.pathname)
-    }
-  }, [])
 
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
@@ -840,7 +800,6 @@ export default function Shell() {
                 onClose={() => { setImaOpen(false); setImaPinned(false) }}
                 onTogglePin={() => setImaPinned(false)}
                 pinned={true}
-                initialSession={preloadedSession}
               />
             </div>
           )}
@@ -853,7 +812,6 @@ export default function Shell() {
               onClose={() => setImaOpen(false)}
               onTogglePin={() => setImaPinned(true)}
               pinned={false}
-              initialSession={preloadedSession}
             />
           </div>
         )}
