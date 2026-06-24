@@ -74,6 +74,29 @@ def init() -> None:
             completed_at TEXT
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS outreach_sessions (
+            id           TEXT PRIMARY KEY,
+            date         TEXT NOT NULL,
+            hours_worked REAL NOT NULL DEFAULT 0,
+            notes        TEXT NOT NULL DEFAULT '',
+            created_at   TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS outreach_contacts (
+            id           TEXT PRIMARY KEY,
+            name         TEXT NOT NULL,
+            company      TEXT NOT NULL DEFAULT '',
+            linkedin_url TEXT NOT NULL DEFAULT '',
+            message_sent TEXT NOT NULL DEFAULT '',
+            status       TEXT NOT NULL DEFAULT 'sent',
+            session_id   TEXT,
+            notes        TEXT NOT NULL DEFAULT '',
+            created_at   TEXT NOT NULL,
+            updated_at   TEXT NOT NULL
+        )
+    """)
     conn.commit()
     if conn.execute("SELECT COUNT(*) FROM monthly_pl").fetchone()[0] == 0:
         conn.executemany(
@@ -220,3 +243,127 @@ def list_events(limit: int = 100) -> list[dict]:
                     pass
         result.append(d)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Outreach
+# ---------------------------------------------------------------------------
+import uuid as _uuid
+
+
+def get_outreach_stats() -> dict:
+    conn = _connect()
+    try:
+        counts = {}
+        for status in ("sent", "connected", "replied", "converted", "ignored"):
+            row = conn.execute(
+                "SELECT COUNT(*) FROM outreach_contacts WHERE status = ?", (status,)
+            ).fetchone()
+            counts[status] = row[0]
+        today = _now()[:10]
+        today_row = conn.execute(
+            "SELECT COUNT(*) FROM outreach_contacts WHERE date(created_at) = ?", (today,)
+        ).fetchone()
+        counts["today"] = today_row[0]
+        session_row = conn.execute(
+            "SELECT COALESCE(SUM(hours_worked), 0) FROM outreach_sessions WHERE date = ?", (today,)
+        ).fetchone()
+        counts["hours_today"] = round(session_row[0], 2)
+        return counts
+    finally:
+        conn.close()
+
+
+def list_outreach_contacts(limit: int = 100, status: str | None = None) -> list[dict]:
+    conn = _connect()
+    try:
+        if status:
+            rows = conn.execute(
+                "SELECT * FROM outreach_contacts WHERE status = ? ORDER BY created_at DESC LIMIT ?",
+                (status, limit),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM outreach_contacts ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def create_outreach_contact(data: dict) -> dict:
+    conn = _connect()
+    try:
+        now = _now()
+        id_ = str(_uuid.uuid4())
+        conn.execute(
+            "INSERT INTO outreach_contacts (id, name, company, linkedin_url, message_sent, status, session_id, notes, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (id_, data["name"], data.get("company", ""), data.get("linkedin_url", ""),
+             data.get("message_sent", ""), data.get("status", "sent"),
+             data.get("session_id"), data.get("notes", ""), now, now),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM outreach_contacts WHERE id = ?", (id_,)).fetchone()
+        return dict(row)
+    finally:
+        conn.close()
+
+
+def update_outreach_contact(id_: str, data: dict) -> dict | None:
+    conn = _connect()
+    try:
+        conn.execute(
+            "UPDATE outreach_contacts SET name=?, company=?, linkedin_url=?, message_sent=?, status=?, notes=?, updated_at=? WHERE id=?",
+            (data["name"], data.get("company", ""), data.get("linkedin_url", ""),
+             data.get("message_sent", ""), data["status"], data.get("notes", ""),
+             _now(), id_),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM outreach_contacts WHERE id = ?", (id_,)).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def log_session_hours(date: str, hours: float, notes: str = "") -> dict:
+    conn = _connect()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM outreach_sessions WHERE date = ?", (date,)
+        ).fetchone()
+        now = _now()
+        if existing:
+            conn.execute(
+                "UPDATE outreach_sessions SET hours_worked = hours_worked + ?, notes = ?, created_at = COALESCE(created_at, ?) WHERE date = ?",
+                (hours, notes, now, date),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO outreach_sessions (id, date, hours_worked, notes, created_at) VALUES (?,?,?,?,?)",
+                (str(_uuid.uuid4()), date, hours, notes, now),
+            )
+        conn.commit()
+        row = conn.execute("SELECT * FROM outreach_sessions WHERE date = ?", (date,)).fetchone()
+        return dict(row)
+    finally:
+        conn.close()
+
+
+def get_weekly_retro(weeks: int = 4) -> list[dict]:
+    conn = _connect()
+    try:
+        rows = conn.execute("""
+            SELECT
+                strftime('%Y-W%W', created_at) AS week,
+                COUNT(*) AS total_sent,
+                SUM(CASE WHEN status = 'connected' THEN 1 ELSE 0 END) AS connected,
+                SUM(CASE WHEN status = 'replied' THEN 1 ELSE 0 END) AS replied,
+                SUM(CASE WHEN status = 'converted' THEN 1 ELSE 0 END) AS converted
+            FROM outreach_contacts
+            GROUP BY week
+            ORDER BY week DESC
+            LIMIT ?
+        """, (weeks,)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
