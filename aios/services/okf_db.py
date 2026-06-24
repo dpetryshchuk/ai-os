@@ -265,10 +265,6 @@ def get_outreach_stats() -> dict:
             "SELECT COUNT(*) FROM outreach_contacts WHERE date(created_at) = ?", (today,)
         ).fetchone()
         counts["today"] = today_row[0]
-        session_row = conn.execute(
-            "SELECT COALESCE(SUM(hours_worked), 0) FROM outreach_sessions WHERE date = ?", (today,)
-        ).fetchone()
-        counts["hours_today"] = round(session_row[0], 2)
         return counts
     finally:
         conn.close()
@@ -321,30 +317,6 @@ def update_outreach_contact(id_: str, data: dict) -> dict | None:
         conn.commit()
         row = conn.execute("SELECT * FROM outreach_contacts WHERE id = ?", (id_,)).fetchone()
         return dict(row) if row else None
-    finally:
-        conn.close()
-
-
-def log_session_hours(date: str, hours: float, notes: str = "") -> dict:
-    conn = _connect()
-    try:
-        existing = conn.execute(
-            "SELECT id FROM outreach_sessions WHERE date = ?", (date,)
-        ).fetchone()
-        now = _now()
-        if existing:
-            conn.execute(
-                "UPDATE outreach_sessions SET hours_worked = hours_worked + ?, notes = ?, created_at = COALESCE(created_at, ?) WHERE date = ?",
-                (hours, notes, now, date),
-            )
-        else:
-            conn.execute(
-                "INSERT INTO outreach_sessions (id, date, hours_worked, notes, created_at) VALUES (?,?,?,?,?)",
-                (str(_uuid.uuid4()), date, hours, notes, now),
-            )
-        conn.commit()
-        row = conn.execute("SELECT * FROM outreach_sessions WHERE date = ?", (date,)).fetchone()
-        return dict(row)
     finally:
         conn.close()
 

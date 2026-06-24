@@ -24,12 +24,6 @@ class OutreachContactUpdate(BaseModel):
     notes: str = ""
 
 
-class SessionLog(BaseModel):
-    date: str
-    hours: float
-    notes: str = ""
-
-
 @router.get("/stats")
 def get_stats():
     okf_db.init()
@@ -56,13 +50,6 @@ def update_contact(contact_id: str, body: OutreachContactUpdate):
     if not contact:
         raise HTTPException(404, "Contact not found")
     return {"ok": True, "contact": contact}
-
-
-@router.post("/sessions")
-def log_session(body: SessionLog):
-    okf_db.init()
-    session = okf_db.log_session_hours(body.date, body.hours, body.notes)
-    return {"ok": True, "session": session}
 
 
 @router.get("/retro")

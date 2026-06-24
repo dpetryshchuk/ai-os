@@ -419,24 +419,8 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_outreach_stats",
-            "description": "Get outreach funnel stats: counts by status, today's outreach, hours logged today.",
+            "description": "Get outreach funnel stats: counts by status, today's outreach count.",
             "parameters": {"type": "object", "properties": {}, "required": []},
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "log_outreach_hours",
-            "description": "Log hours spent on outreach for a session. Date defaults to today.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "hours": {"type": "number", "description": "Hours worked"},
-                    "notes": {"type": "string", "description": "What you worked on"},
-                    "date":  {"type": "string", "description": "Date YYYY-MM-DD, defaults to today"},
-                },
-                "required": ["hours"],
-            },
         },
     },
     {
@@ -450,6 +434,35 @@ TOOLS = [
                     "weeks": {"type": "integer", "description": "Number of weeks to show, default 4"},
                 },
                 "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_shell",
+            "description": "Run a shell command in the repo. Use for: npm builds, git operations (status, diff, merge, rebase, conflict resolution), running tests, grep, find, any CLI task. Returns stdout, stderr, exit_code. Default cwd is /repo (the git repo root).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "Shell command to run"},
+                    "cwd": {"type": "string", "description": "Working directory, defaults to /repo"},
+                },
+                "required": ["command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fetch_url",
+            "description": "HTTP GET a URL and return the text content. Use for: reading docs, checking APIs, fetching web pages for research.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "URL to fetch"},
+                },
+                "required": ["url"],
             },
         },
     },
@@ -749,14 +762,6 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             okf_db.init()
             return json.dumps(okf_db.get_outreach_stats())
 
-        elif name == "log_outreach_hours":
-            from services import okf_db
-            from datetime import date as _date
-            okf_db.init()
-            day = inputs.get("date") or str(_date.today())
-            session = okf_db.log_session_hours(day, inputs["hours"], inputs.get("notes", ""))
-            return json.dumps({"ok": True, "session": session})
-
         elif name == "get_outreach_retro":
             from services import okf_db
             okf_db.init()
@@ -850,6 +855,47 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             content = f"# {title}\n\n{summary}\n"
             (sessions_dir / fname).write_text(content)
             return json.dumps({"ok": True, "saved_to": f"sessions/{fname}"})
+
+        elif name == "run_shell":
+            import subprocess
+            from config import settings as _s
+            command = inputs.get("command", "").strip()
+            if not command:
+                return json.dumps({"error": "command is required"})
+            cwd = inputs.get("cwd") or getattr(_s, "writing_dir", "/repo")
+            try:
+                proc = subprocess.run(
+                    command,
+                    shell=True,
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                    env={**os.environ, "GIT_AUTHOR_NAME": getattr(_s, "git_author_name", "Ima"), "GIT_AUTHOR_EMAIL": getattr(_s, "git_author_email", "ima@aios"), "GIT_COMMITTER_NAME": getattr(_s, "git_author_name", "Ima"), "GIT_COMMITTER_EMAIL": getattr(_s, "git_author_email", "ima@aios")},
+                )
+                stdout = proc.stdout[-8000:] if len(proc.stdout) > 8000 else proc.stdout
+                stderr = proc.stderr[-2000:] if len(proc.stderr) > 2000 else proc.stderr
+                return json.dumps({"ok": proc.returncode == 0, "exit_code": proc.returncode, "stdout": stdout, "stderr": stderr})
+            except subprocess.TimeoutExpired:
+                return json.dumps({"ok": False, "error": "Timed out after 120s"})
+            except Exception as exc:
+                return json.dumps({"ok": False, "error": str(exc)})
+
+        elif name == "fetch_url":
+            import httpx
+            from bs4 import BeautifulSoup
+            url = inputs.get("url", "").strip()
+            if not url:
+                return json.dumps({"error": "url is required"})
+            try:
+                with httpx.Client(timeout=30, follow_redirects=True) as client:
+                    r = client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+                soup = BeautifulSoup(r.text, "html.parser")
+                text = soup.get_text(separator="\n", strip=True)
+                text = text[:10000] if len(text) > 10000 else text
+                return json.dumps({"ok": True, "status": r.status_code, "content": text})
+            except Exception as exc:
+                return json.dumps({"ok": False, "error": str(exc)})
 
         else:
             return json.dumps({"error": f"Unknown tool: {name}"})
