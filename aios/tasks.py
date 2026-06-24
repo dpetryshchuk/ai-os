@@ -269,7 +269,15 @@ def embed_backfill() -> dict:
                 print(f"backfill note {note_id}: {e}")
 
         with conn.cursor() as cur:
-            cur.execute("SELECT id, title || ' ' || COALESCE(link,'') FROM job_postings WHERE status != 'dropped'")
+            cur.execute(
+                """
+                SELECT j.id,
+                       j.title || E'\n' || COALESCE(c.name, '') || E'\n\n' || COALESCE(j.description, j.link, '')
+                FROM job_postings j
+                LEFT JOIN companies c ON j.company_id = c.id
+                WHERE j.status != 'dropped'
+                """
+            )
             jobs = cur.fetchall()
 
         for job_id, text in jobs:

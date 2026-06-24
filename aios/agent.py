@@ -443,12 +443,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "semantic_search",
-            "description": "Search across notes and job postings by semantic meaning (not just keywords). Use when the user asks about topics, themes, or content they've written or saved. Returns the most relevant chunks with similarity scores.",
+            "description": "Search across notes, vault, and job postings by semantic meaning. For job matching ('what jobs would I like?', 'find roles that fit me'), use source_type='job_posting' — results include title, company, link, and status so you can give direct recommendations. For general knowledge search, omit source_type.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "What to search for — describe the topic or paste a phrase"},
+                    "query": {"type": "string", "description": "Natural-language description of what to find. For job matching, describe skills/interests/role type, e.g. 'senior AI engineer LLM tooling small team ownership'"},
                     "limit": {"type": "integer", "description": "Max results, default 8"},
+                    "source_type": {"type": "string", "description": "Filter to one source: 'job_posting', 'vault', or 'note'. Omit to search everything."},
                 },
                 "required": ["query"],
             },
@@ -944,9 +945,26 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             from services import embeddings as emb_svc
             query = inputs.get("query", "").strip()
             limit = inputs.get("limit", 8)
+            source_type = inputs.get("source_type") or None  # e.g. "job_posting", "vault", "note"
             if not query:
                 return json.dumps({"error": "query is required"})
-            results = await emb_svc.search(pool, query, limit)
+            results = await emb_svc.search(pool, query, limit, source_type=source_type)
+            # Enrich job_posting results with title / company / link / status
+            job_ids = [r["source_id"] for r in results if r["source_type"] == "job_posting"]
+            if job_ids:
+                rows = await pool.fetch(
+                    """
+                    SELECT j.id, j.title, j.link, j.status, j.location, c.name AS company
+                    FROM job_postings j
+                    LEFT JOIN companies c ON j.company_id = c.id
+                    WHERE j.id = ANY($1)
+                    """,
+                    job_ids,
+                )
+                job_meta = {r["id"]: dict(r) for r in rows}
+                for r in results:
+                    if r["source_type"] == "job_posting":
+                        r.update(job_meta.get(r["source_id"], {}))
             return json.dumps({"results": results}, default=str)
 
         elif name == "run_shell":

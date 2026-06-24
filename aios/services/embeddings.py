@@ -40,16 +40,34 @@ async def upsert(pool: asyncpg.Pool, source_type: str, source_id: str, text: str
     )
 
 
-async def search(pool: asyncpg.Pool, query: str, limit: int = 8) -> list[dict]:
+async def search(
+    pool: asyncpg.Pool,
+    query: str,
+    limit: int = 8,
+    source_type: str | None = None,
+) -> list[dict]:
     vec = await embed_async(query)
-    rows = await pool.fetch(
-        """
-        SELECT source_type, source_id, chunk_text,
-               1 - (embedding <=> $1::vector) AS similarity
-        FROM embeddings
-        ORDER BY embedding <=> $1::vector
-        LIMIT $2
-        """,
-        _vec_str(vec), limit,
-    )
+    if source_type:
+        rows = await pool.fetch(
+            """
+            SELECT source_type, source_id, chunk_text,
+                   1 - (embedding <=> $1::vector) AS similarity
+            FROM embeddings
+            WHERE source_type = $3
+            ORDER BY embedding <=> $1::vector
+            LIMIT $2
+            """,
+            _vec_str(vec), limit, source_type,
+        )
+    else:
+        rows = await pool.fetch(
+            """
+            SELECT source_type, source_id, chunk_text,
+                   1 - (embedding <=> $1::vector) AS similarity
+            FROM embeddings
+            ORDER BY embedding <=> $1::vector
+            LIMIT $2
+            """,
+            _vec_str(vec), limit,
+        )
     return [dict(r) for r in rows]
