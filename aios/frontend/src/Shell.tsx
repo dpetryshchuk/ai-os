@@ -715,7 +715,7 @@ export default function Shell() {
         )}
       >
         <div className={cn('size-2 rounded-full transition-all', imaOpen ? 'bg-background' : 'bg-green-400 animate-pulse')} />
-        <span className="font-serif italic text-sm tracking-wide">Talk to Ima</span>
+        <span className="font-sans text-sm tracking-wide">Talk to Ima</span>
       </button>
 
       {/* Sidebar + content row */}
