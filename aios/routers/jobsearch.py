@@ -3,6 +3,7 @@ import json
 import os
 import secrets
 import shutil
+from datetime import date as _today_date
 
 import asyncpg
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -190,12 +191,10 @@ async def get_retro(pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> Retr
         """),
     )
 
-    today_count = sum(r["count"] for r in daily if str(r["date"]) == str(__import__("datetime").date.today()))
-    from datetime import date as _date
-    week_start = _date.today()
-    dow = week_start.weekday()
+    today_count = sum(r["count"] for r in daily if str(r["date"]) == str(_today_date.today()))
     import datetime as _dt
-    week_start = week_start - _dt.timedelta(days=dow)
+    week_start = _today_date.today()
+    week_start = week_start - _dt.timedelta(days=week_start.weekday())
     week_count = sum(r["count"] for r in daily if r["date"] >= week_start)
 
     outreached = funnel_rows["outreached"] or 0

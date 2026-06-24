@@ -10,10 +10,9 @@ def _vault() -> Path:
     return Path(settings.vault_dir)
 
 def _safe(rel: str) -> Path:
-    """Resolve a relative path inside the vault, raise 404 if outside."""
     base = _vault().resolve()
     target = (base / rel.lstrip("/")).resolve()
-    if not str(target).startswith(str(base)):
+    if not str(target).startswith(str(base) + "/"):
         raise HTTPException(400, "Path outside vault")
     return target
 

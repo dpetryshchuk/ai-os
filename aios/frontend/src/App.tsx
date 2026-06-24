@@ -1,5 +1,21 @@
+import { Component, type ReactNode } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import Shell from './Shell'
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="flex items-center justify-center h-screen text-sm text-muted-foreground p-8">
+          Something went wrong. Reload the page.
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 import Home from './pages/Home'
 import EventsPage from './pages/Events'
 import Chat from './pages/JobSearch/Chat'
@@ -23,6 +39,7 @@ import Finances from './pages/Finances'
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <Routes>
         <Route element={<Shell />}>
@@ -53,5 +70,6 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </ErrorBoundary>
   )
 }

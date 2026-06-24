@@ -81,5 +81,5 @@ jobs:
             set -e
             cd /home/dima/ai-os
             git fetch origin master && git reset --hard origin/master
-            docker compose up -d --remove-orphans --pull=never || true
+            docker compose up -d --remove-orphans --pull=never
             sudo systemctl reload-or-restart caddy

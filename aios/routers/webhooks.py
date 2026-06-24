@@ -1,5 +1,7 @@
 import hmac
 import hashlib
+import json
+import secrets
 from typing import Callable
 
 import asyncpg
@@ -45,10 +47,9 @@ VERIFIERS: dict[str, Callable[[bytes, dict], None]] = {
 
 def _verify_signature(source: str, body: bytes, headers) -> None:
     verifier = VERIFIERS.get(source)
-    if verifier is None and source not in VERIFIERS:
+    if verifier is None:
         raise HTTPException(401, f"Unknown webhook source: {source}")
-    if verifier:
-        verifier(body, dict(headers))
+    verifier(body, dict(headers))
 
 
 # ── Webhook endpoint ──────────────────────────────────────────────────────────
@@ -67,8 +68,7 @@ async def receive_webhook(
 
     _verify_signature(source, body, request.headers)
 
-    import json, secrets as _s
-    event_id = _s.token_hex(8)
+    event_id = secrets.token_hex(8)
     await pool.execute(
         "INSERT INTO os_events (id, source, type, payload) VALUES ($1,$2,$3,$4::jsonb)",
         event_id, "webhook", f"{source}.received", json.dumps(payload),

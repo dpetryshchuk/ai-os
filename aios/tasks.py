@@ -86,18 +86,16 @@ def run_scheduled(event_type: str) -> None:
 
 # ── OKF: proposal generation ──────────────────────────────────────────────────
 
-import json as _json
-from pathlib import Path as _Path
-import litellm as _litellm
-from services import okf_db as _okf_db
-from services import pandadoc as _pandadoc
-
 
 def _load_proposal_prompts() -> dict:
+    import json as _json
+    from pathlib import Path as _Path
     return _json.loads((_Path(__file__).parent / "prompts" / "proposal.json").read_text())
 
 
 def _call_proposal_llm(prompts: dict, req_data: dict) -> dict:
+    import json as _json
+    import litellm as _litellm
     examples = []
     for msg in prompts["examples"]:
         content = msg["content"]
@@ -131,6 +129,8 @@ def _call_proposal_llm(prompts: dict, req_data: dict) -> dict:
 
 @celery_app.task(bind=True, queue="okf")
 def generate_proposal(self, req_data: dict) -> dict:
+    from services import okf_db as _okf_db
+    from services import pandadoc as _pandadoc
     job_id = self.request.id
     _okf_db.init()
     _okf_db.create_event(job_id, "proposal.generate", req_data)

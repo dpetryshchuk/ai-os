@@ -1,9 +1,3 @@
-{
-	servers {
-		protocols h1
-	}
-}
-
 (auth) {
   basic_auth {
     import /home/dima/ai-os/caddy/auth_credentials

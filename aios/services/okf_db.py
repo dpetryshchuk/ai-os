@@ -48,63 +48,65 @@ def _now() -> str:
 def init() -> None:
     _DB.parent.mkdir(parents=True, exist_ok=True)
     conn = _connect()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS monthly_pl (
-            id                INTEGER PRIMARY KEY AUTOINCREMENT,
-            month             TEXT    NOT NULL UNIQUE,
-            gross_revenue     REAL    NOT NULL DEFAULT 0,
-            service_fees      REAL    NOT NULL DEFAULT 0,
-            fixed_overhead    REAL    NOT NULL DEFAULT 0,
-            variable_overhead REAL    NOT NULL DEFAULT 0,
-            tax_rate          REAL    NOT NULL DEFAULT 0.28,
-            notes             TEXT    NOT NULL DEFAULT ''
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS events (
-            id           TEXT PRIMARY KEY,
-            type         TEXT NOT NULL,
-            source       TEXT NOT NULL DEFAULT 'onekeyflow',
-            status       TEXT NOT NULL DEFAULT 'pending',
-            payload      TEXT,
-            result       TEXT,
-            error        TEXT,
-            created_at   TEXT NOT NULL,
-            started_at   TEXT,
-            completed_at TEXT
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS outreach_sessions (
-            id           TEXT PRIMARY KEY,
-            date         TEXT NOT NULL,
-            hours_worked REAL NOT NULL DEFAULT 0,
-            notes        TEXT NOT NULL DEFAULT '',
-            created_at   TEXT NOT NULL
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS outreach_contacts (
-            id           TEXT PRIMARY KEY,
-            name         TEXT NOT NULL,
-            company      TEXT NOT NULL DEFAULT '',
-            linkedin_url TEXT NOT NULL DEFAULT '',
-            message_sent TEXT NOT NULL DEFAULT '',
-            status       TEXT NOT NULL DEFAULT 'sent',
-            session_id   TEXT,
-            notes        TEXT NOT NULL DEFAULT '',
-            created_at   TEXT NOT NULL,
-            updated_at   TEXT NOT NULL
-        )
-    """)
-    conn.commit()
-    if conn.execute("SELECT COUNT(*) FROM monthly_pl").fetchone()[0] == 0:
-        conn.executemany(
-            "INSERT INTO monthly_pl (month, gross_revenue, service_fees, fixed_overhead, variable_overhead, tax_rate, notes) VALUES (?,?,?,?,?,?,?)",
-            _SEED,
-        )
+    try:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS monthly_pl (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                month             TEXT    NOT NULL UNIQUE,
+                gross_revenue     REAL    NOT NULL DEFAULT 0,
+                service_fees      REAL    NOT NULL DEFAULT 0,
+                fixed_overhead    REAL    NOT NULL DEFAULT 0,
+                variable_overhead REAL    NOT NULL DEFAULT 0,
+                tax_rate          REAL    NOT NULL DEFAULT 0.28,
+                notes             TEXT    NOT NULL DEFAULT ''
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS events (
+                id           TEXT PRIMARY KEY,
+                type         TEXT NOT NULL,
+                source       TEXT NOT NULL DEFAULT 'onekeyflow',
+                status       TEXT NOT NULL DEFAULT 'pending',
+                payload      TEXT,
+                result       TEXT,
+                error        TEXT,
+                created_at   TEXT NOT NULL,
+                started_at   TEXT,
+                completed_at TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS outreach_sessions (
+                id           TEXT PRIMARY KEY,
+                date         TEXT NOT NULL,
+                hours_worked REAL NOT NULL DEFAULT 0,
+                notes        TEXT NOT NULL DEFAULT '',
+                created_at   TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS outreach_contacts (
+                id           TEXT PRIMARY KEY,
+                name         TEXT NOT NULL,
+                company      TEXT NOT NULL DEFAULT '',
+                linkedin_url TEXT NOT NULL DEFAULT '',
+                message_sent TEXT NOT NULL DEFAULT '',
+                status       TEXT NOT NULL DEFAULT 'sent',
+                session_id   TEXT,
+                notes        TEXT NOT NULL DEFAULT '',
+                created_at   TEXT NOT NULL,
+                updated_at   TEXT NOT NULL
+            )
+        """)
         conn.commit()
-    conn.close()
+        if conn.execute("SELECT COUNT(*) FROM monthly_pl").fetchone()[0] == 0:
+            conn.executemany(
+                "INSERT INTO monthly_pl (month, gross_revenue, service_fees, fixed_overhead, variable_overhead, tax_rate, notes) VALUES (?,?,?,?,?,?,?)",
+                _SEED,
+            )
+            conn.commit()
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -301,6 +303,15 @@ def create_outreach_contact(data: dict) -> dict:
         conn.commit()
         row = conn.execute("SELECT * FROM outreach_contacts WHERE id = ?", (id_,)).fetchone()
         return dict(row)
+    finally:
+        conn.close()
+
+
+def get_outreach_contact(id_: str) -> dict | None:
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT * FROM outreach_contacts WHERE id = ?", (id_,)).fetchone()
+        return dict(row) if row else None
     finally:
         conn.close()
 

@@ -569,8 +569,10 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
 
         elif name == "query_db":
             sql = inputs["sql"].strip()
-            if not sql.upper().startswith("SELECT"):
-                return json.dumps({"error": "Only SELECT queries allowed"})
+            sql_upper = sql.upper()
+            forbidden = ("INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "TRUNCATE", "GRANT", "REVOKE")
+            if not sql_upper.startswith("SELECT") or ";" in sql or any(f" {kw} " in f" {sql_upper} " for kw in forbidden):
+                return json.dumps({"error": "Only simple SELECT queries allowed (no semicolons, no DML/DDL)"})
             rows = await pool.fetch(sql)
             return json.dumps([dict(r) for r in rows], default=str)
 
@@ -758,8 +760,7 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
         elif name == "update_outreach_contact":
             from services import okf_db
             okf_db.init()
-            row = okf_db.list_outreach_contacts(limit=200)
-            match = next((c for c in row if c["id"] == inputs["contact_id"]), None)
+            match = okf_db.get_outreach_contact(inputs["contact_id"])
             if not match:
                 return json.dumps({"error": "Contact not found"})
             updated = okf_db.update_outreach_contact(inputs["contact_id"], {
@@ -838,7 +839,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                 sessions = []
                 if sessions_dir.exists():
                     for f in sorted(sessions_dir.glob("*.md"), reverse=True)[:limit]:
-                        first_line = f.read_text().splitlines()[0] if f.read_text() else ""
+                        text = f.read_text()
+                        first_line = text.splitlines()[0] if text else ""
                         sessions.append({"filename": f.name, "title": first_line.lstrip("# ")})
                 return json.dumps({"sessions": sessions})
 
@@ -921,8 +923,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             if not url:
                 return json.dumps({"error": "url is required"})
             try:
-                with httpx.Client(timeout=30, follow_redirects=True) as client:
-                    r = client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+                async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+                    r = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
                 soup = BeautifulSoup(r.text, "html.parser")
                 text = soup.get_text(separator="\n", strip=True)
                 text = text[:10000] if len(text) > 10000 else text

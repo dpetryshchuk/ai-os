@@ -351,7 +351,7 @@ function ImaPanel({
   const send = useCallback(async () => {
     const text = input.trim()
     if (!text || streaming) return
-    const uid = `u${Date.now()}`, aid = `a${Date.now()}`
+    const uid = `u${crypto.randomUUID()}`, aid = `a${crypto.randomUUID()}`
     setMessages(prev => [...prev,
       { id: uid, role: 'user', text },
       { id: aid, role: 'agent', text: IMA_THINKING[0], thinking: true },
@@ -375,8 +375,9 @@ function ImaPanel({
       })
       clearInterval(iv)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.body) throw new Error('No response body')
       let textContent = '', buffer = '', started = false
-      const reader = res.body!.getReader(), dec = new TextDecoder()
+      const reader = res.body.getReader(), dec = new TextDecoder()
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -395,7 +396,7 @@ function ImaPanel({
             // Append to last text part or create new one
             const last = partsArr[partsArr.length - 1]
             if (last?.type === 'text') {
-              last.content += delta
+              partsArr[partsArr.length - 1] = { ...last, content: last.content + delta }
             } else {
               partsArr.push({ type: 'text', content: delta })
             }

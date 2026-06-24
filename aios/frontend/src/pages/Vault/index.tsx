@@ -19,6 +19,8 @@ export default function Vault() {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [loadError, setLoadError] = useState('')
   const [search, setSearch] = useState('')
   const [openFolders, setOpenFolders] = useState<Set<string>>(new Set(['', 'AI OS', '00 Inbox']))
 
@@ -26,27 +28,37 @@ export default function Vault() {
     fetch('/api/vault/tree')
       .then(r => r.json())
       .then(d => setFiles(d.files ?? []))
+      .catch(() => {/* tree load failure is silent — empty state is clear enough */})
   }, [])
 
   const loadFile = useCallback((path: string) => {
     setSelected(path)
     setEditing(false)
+    setLoadError('')
     fetch(`/api/vault/file?path=${encodeURIComponent(path)}`)
       .then(r => r.json())
       .then(d => { setContent(d.content); setDraft(d.content) })
+      .catch(() => setLoadError('Failed to load file'))
   }, [])
 
   const save = useCallback(async () => {
     if (!selected) return
     setSaving(true)
-    await fetch(`/api/vault/file?path=${encodeURIComponent(selected)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: draft }),
-    })
-    setContent(draft)
-    setEditing(false)
-    setSaving(false)
+    setSaveError('')
+    try {
+      const res = await fetch(`/api/vault/file?path=${encodeURIComponent(selected)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: draft }),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      setContent(draft)
+      setEditing(false)
+    } catch {
+      setSaveError('Save failed — changes not persisted')
+    } finally {
+      setSaving(false)
+    }
   }, [selected, draft])
 
   // Group files by folder
@@ -161,6 +173,17 @@ export default function Vault() {
                 )}
               </div>
             </div>
+            {/* Error banners */}
+            {saveError && (
+              <div className="px-4 py-2 text-xs text-red-500 bg-red-500/10 border-b border-red-500/20">
+                {saveError}
+              </div>
+            )}
+            {loadError && (
+              <div className="px-4 py-2 text-xs text-red-500 bg-red-500/10 border-b border-red-500/20">
+                {loadError}
+              </div>
+            )}
             {/* Body */}
             {editing ? (
               <textarea
