@@ -343,7 +343,7 @@ function ImaPanel({
       { id: aid, role: 'agent', text: IMA_THINKING[0], thinking: true },
     ])
     setInput('')
-    if (textareaRef.current) textareaRef.current.style.height = 'auto'
+    if (textareaRef.current) { textareaRef.current.style.height = 'auto'; textareaRef.current.focus() }
     setStreaming(true)
     const iv = setInterval(() => {
       thinkingIdxRef.current = (thinkingIdxRef.current + 1) % IMA_THINKING.length
