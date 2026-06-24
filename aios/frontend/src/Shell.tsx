@@ -417,6 +417,7 @@ function ImaPanel({
       historyRef.current = historyRef.current.slice(0, -1)
     } finally {
       setStreaming(false)
+      textareaRef.current?.focus()
       if (historyRef.current.length > 0) {
         const title = generateTitle(historyRef.current)
         fetch('/api/sessions', {
