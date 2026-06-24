@@ -1,6 +1,6 @@
 services:
   aios:
-    image: ghcr.io/dpetryshchuk/ai-os/aios:latest
+    image: ghcr.io/dpetryshchuk/aios-private/aios:latest
     ports:
       - "127.0.0.1:4116:4116"
     environment:
@@ -45,7 +45,7 @@ services:
     restart: unless-stopped
 
   celery-worker:
-    image: ghcr.io/dpetryshchuk/ai-os/aios:latest
+    image: ghcr.io/dpetryshchuk/aios-private/aios:latest
     command: celery -A tasks worker --loglevel=info -Q celery,okf
     working_dir: /app
     environment:
@@ -69,7 +69,7 @@ services:
     restart: unless-stopped
 
   celery-beat:
-    image: ghcr.io/dpetryshchuk/ai-os/aios:latest
+    image: ghcr.io/dpetryshchuk/aios-private/aios:latest
     command: celery -A tasks beat --loglevel=info
     working_dir: /app
     environment:

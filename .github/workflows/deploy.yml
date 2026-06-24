@@ -39,7 +39,7 @@ jobs:
           context: .
           file: aios/Dockerfile
           push: true
-          tags: ghcr.io/dpetryshchuk/ai-os/aios:latest
+          tags: ghcr.io/dpetryshchuk/aios-private/aios:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Deploy to VPS
@@ -53,6 +53,7 @@ jobs:
             set -e
             cd /home/dima/ai-os
             git fetch origin master && git reset --hard origin/master
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose pull aios
             docker compose up -d aios celery-worker celery-beat
 
