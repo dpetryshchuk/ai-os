@@ -626,8 +626,10 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             return json.dumps(essays)
 
         elif name == "read_code_file":
+            from config import settings as app_settings
             rel_path = inputs.get("path", "").lstrip("/")
-            base = Path(__file__).parent
+            # Always operate on the git repo, not the ephemeral container copy
+            base = Path(app_settings.writing_dir) / "aios"
             target = (base / rel_path).resolve()
             if not str(target).startswith(str(base.resolve())):
                 result = {"error": "Access denied: path outside aios/"}
@@ -639,8 +641,9 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             return json.dumps(result)
 
         elif name == "edit_code_file":
+            from config import settings as app_settings
             rel_path = inputs.get("path", "").lstrip("/")
-            base = Path(__file__).parent
+            base = Path(app_settings.writing_dir) / "aios"
             target = (base / rel_path).resolve()
             if not str(target).startswith(str(base.resolve())):
                 result = {"error": "Access denied: path outside aios/"}
@@ -664,7 +667,9 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             import subprocess
             from config import settings as app_settings
 
-            repo_root = Path(__file__).parent.parent
+            # /repo is the git repo root (volume-mounted from VPS)
+            repo_root = Path(app_settings.writing_dir)
+            aios_base = repo_root / "aios"
             msg = inputs.get("message", "agent edit")
             files = inputs.get("files", [])
 
@@ -678,9 +683,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
 
             try:
                 if files:
-                    aios_dir = Path(__file__).parent
                     for f in files:
-                        rel = aios_dir / f.lstrip("/")
+                        rel = aios_base / f.lstrip("/")
                         subprocess.run(["git", "add", str(rel)], cwd=repo_root, check=True, env=env)
                 else:
                     subprocess.run(["git", "add", "-u"], cwd=repo_root, check=True, env=env)
@@ -694,6 +698,10 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                         ["git", "push", "private", "master"],
                         cwd=repo_root, capture_output=True, text=True, env=env,
                     )
+                    subprocess.run(
+                        ["git", "push", "origin", "master"],
+                        cwd=repo_root, capture_output=True, text=True, env=env,
+                    )
                     if push_result.returncode != 0:
                         result = {"ok": False, "error": push_result.stderr}
                     else:
@@ -703,7 +711,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             return json.dumps(result)
 
         elif name == "list_code_files":
-            base = Path(__file__).parent
+            from config import settings as app_settings
+            base = Path(app_settings.writing_dir) / "aios"
             subdir = inputs.get("subdir", "").lstrip("/")
             target = (base / subdir).resolve() if subdir else base.resolve()
             if not str(target).startswith(str(base.resolve())):

@@ -213,11 +213,42 @@ const IMA_STREAM_URL = '/api/jobsearch/agents/stream'
 
 const IMA_THINKING = ['Thinking...', 'Working...', 'Looking it up...', 'On it...']
 
+interface ImaToolCall {
+  toolCallId: string
+  toolName: string
+  args: unknown
+  result?: unknown
+}
+
 interface ImaMsg {
   id: string
   role: 'user' | 'agent'
   text: string
   thinking?: boolean
+  toolCalls?: ImaToolCall[]
+}
+
+function ImaToolCallCard({ call }: { call: ImaToolCall }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded border border-border text-xs overflow-hidden mt-1.5">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 w-full px-2 py-1 text-left hover:bg-muted/50 transition-colors"
+      >
+        <ChevronRight size={9} className={cn('text-muted-foreground shrink-0 transition-transform', open && 'rotate-90')} />
+        <span className="font-mono text-[10px] text-muted-foreground tracking-wide">{call.toolName}</span>
+      </button>
+      {open && (
+        <div className="border-t border-border p-2 flex flex-col gap-1.5 bg-muted/20">
+          <pre className="font-mono text-[10px] text-foreground/60 whitespace-pre-wrap overflow-x-auto">{JSON.stringify(call.args, null, 2)}</pre>
+          {call.result !== undefined && (
+            <pre className="font-mono text-[10px] text-foreground/60 whitespace-pre-wrap overflow-x-auto border-t border-border/50 pt-1.5">{JSON.stringify(call.result, null, 2)}</pre>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function ImaMsgBubble({ msg }: { msg: ImaMsg }) {
@@ -236,10 +267,15 @@ function ImaMsgBubble({ msg }: { msg: ImaMsg }) {
         {msg.thinking ? (
           <span className="text-muted-foreground animate-pulse text-xs">{msg.text}</span>
         ) : (
-          <div
-            className="prose prose-sm prose-neutral max-w-none"
-            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(msg.text) as string) }}
-          />
+          <>
+            <div
+              className="prose prose-sm prose-neutral max-w-none"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(msg.text) as string) }}
+            />
+            {msg.toolCalls && msg.toolCalls.length > 0 && msg.toolCalls.map(c => (
+              <ImaToolCallCard key={c.toolCallId} call={c} />
+            ))}
+          </>
         )}
       </div>
     </div>
@@ -305,6 +341,7 @@ function ImaPanel({
       updateMsg(aid, m => m.thinking ? { ...m, text: IMA_THINKING[thinkingIdxRef.current] } : m)
     }, 700)
     historyRef.current = [...historyRef.current, { role: 'user', content: text }]
+    const toolCallMap: Record<string, ImaToolCall> = {}
     try {
       const res = await fetch(IMA_STREAM_URL, {
         method: 'POST',
@@ -331,6 +368,16 @@ function ImaPanel({
             textContent += chunk.payload.text as string
             if (!started) { started = true; updateMsg(aid, m => ({ ...m, text: textContent, thinking: false })) }
             else updateMsg(aid, m => ({ ...m, text: textContent }))
+          } else if (chunk.type === 'tool-call' && chunk.payload) {
+            const { toolCallId, toolName, args } = chunk.payload as unknown as ImaToolCall
+            toolCallMap[toolCallId] = { toolCallId, toolName, args }
+            updateMsg(aid, m => ({ ...m, toolCalls: Object.values(toolCallMap) }))
+          } else if (chunk.type === 'tool-result' && chunk.payload) {
+            const { toolCallId, result } = chunk.payload as { toolCallId: string; result: unknown }
+            if (toolCallMap[toolCallId]) {
+              toolCallMap[toolCallId] = { ...toolCallMap[toolCallId], result }
+              updateMsg(aid, m => ({ ...m, toolCalls: Object.values(toolCallMap) }))
+            }
           }
         }
       }
