@@ -11,7 +11,25 @@ _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 
 def _load_instructions() -> str:
-    return (_PROMPTS_DIR / "ima.md").read_text()
+    from config import settings
+    base = (_PROMPTS_DIR / "ima.md").read_text()
+
+    memory_dir = Path(settings.data_dir) / "memory"
+    sections = []
+
+    user_file = memory_dir / "USER.md"
+    if user_file.exists():
+        content = user_file.read_text().strip()
+        if content:
+            sections.append(f"\n\n---\n## About the user (from USER.md)\n{content}")
+
+    memory_file = memory_dir / "MEMORY.md"
+    if memory_file.exists():
+        content = memory_file.read_text().strip()
+        if content:
+            sections.append(f"\n\n---\n## Accumulated memory (from MEMORY.md)\n{content}")
+
+    return base + "".join(sections)
 
 TOOLS = [
     {
@@ -291,6 +309,59 @@ TOOLS = [
                     },
                 },
                 "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_skills",
+            "description": "List available skills in the prompts/skills/ directory. Returns name, description, and tags for each. Use this to discover what skills exist before loading one with read_code_file.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_memory",
+            "description": "Read persistent memory. type='user' reads USER.md (preferences/background), type='general' reads MEMORY.md (accumulated facts), type='sessions' lists recent session summaries.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "type": {"type": "string", "enum": ["user", "general", "sessions"], "description": "Which memory to read"},
+                    "limit": {"type": "integer", "description": "For sessions: max to list, default 10"},
+                },
+                "required": ["type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "append_memory",
+            "description": "Append a fact or preference to persistent memory. Use 'user' for things about the user (preferences, background). Use 'general' for facts about their job search, projects, decisions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {"type": "string", "description": "What to remember. Write as a complete sentence."},
+                    "type": {"type": "string", "enum": ["user", "general"], "description": "user=USER.md, general=MEMORY.md"},
+                },
+                "required": ["content", "type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "save_session_summary",
+            "description": "Save a summary of this conversation session for future reference. Call this at the end of a productive session covering a significant topic.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "summary": {"type": "string", "description": "2-5 sentences covering: what was discussed, decisions made, actions taken, follow-ups needed."},
+                    "title": {"type": "string", "description": "Short title for this session (5-8 words)"},
+                },
+                "required": ["summary", "title"],
             },
         },
     },
@@ -690,6 +761,95 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             import okf_db
             okf_db.init()
             return json.dumps(okf_db.get_weekly_retro(inputs.get("weeks", 4)), default=str)
+
+        elif name == "list_skills":
+            skills_dir = Path(__file__).parent / "prompts" / "skills"
+            skills = []
+            if skills_dir.exists():
+                for f in sorted(skills_dir.glob("*.md")):
+                    if f.name.startswith("STANDARD"):
+                        continue  # skip the meta doc
+                    content = f.read_text()
+                    # Parse YAML frontmatter if present
+                    name_val = f.stem
+                    desc_val = ""
+                    tags_val = []
+                    if content.startswith("---"):
+                        end = content.find("---", 3)
+                        if end > 0:
+                            fm = content[3:end]
+                            for line in fm.splitlines():
+                                if line.startswith("name:"):
+                                    name_val = line.split(":", 1)[1].strip()
+                                elif line.startswith("description:"):
+                                    desc_val = line.split(":", 1)[1].strip()
+                                elif line.startswith("tags:"):
+                                    tags_val = [t.strip(" []'\"") for t in line.split(":", 1)[1].split(",")]
+                    skills.append({"name": name_val, "description": desc_val, "tags": tags_val, "path": f"prompts/skills/{f.name}"})
+            return json.dumps({"skills": skills})
+
+        elif name == "read_memory":
+            from config import settings
+            memory_dir = Path(settings.data_dir) / "memory"
+            mem_type = inputs.get("type", "general")
+
+            if mem_type == "user":
+                f = memory_dir / "USER.md"
+                content = f.read_text().strip() if f.exists() else "USER.md is empty — nothing recorded yet."
+                return json.dumps({"type": "user", "content": content})
+
+            elif mem_type == "general":
+                f = memory_dir / "MEMORY.md"
+                content = f.read_text().strip() if f.exists() else "MEMORY.md is empty — nothing recorded yet."
+                return json.dumps({"type": "general", "content": content})
+
+            elif mem_type == "sessions":
+                sessions_dir = memory_dir / "sessions"
+                limit = inputs.get("limit", 10)
+                sessions = []
+                if sessions_dir.exists():
+                    for f in sorted(sessions_dir.glob("*.md"), reverse=True)[:limit]:
+                        first_line = f.read_text().splitlines()[0] if f.read_text() else ""
+                        sessions.append({"filename": f.name, "title": first_line.lstrip("# ")})
+                return json.dumps({"sessions": sessions})
+
+        elif name == "append_memory":
+            from config import settings
+            from datetime import datetime
+            memory_dir = Path(settings.data_dir) / "memory"
+            memory_dir.mkdir(parents=True, exist_ok=True)
+
+            mem_type = inputs.get("type", "general")
+            content = inputs.get("content", "").strip()
+            if not content:
+                return json.dumps({"error": "content is required"})
+
+            fname = "USER.md" if mem_type == "user" else "MEMORY.md"
+            f = memory_dir / fname
+            timestamp = datetime.utcnow().strftime("%Y-%m-%d")
+            entry = f"\n- [{timestamp}] {content}"
+            with open(f, "a") as fp:
+                fp.write(entry)
+            return json.dumps({"ok": True, "appended_to": fname})
+
+        elif name == "save_session_summary":
+            from config import settings
+            from datetime import datetime
+            memory_dir = Path(settings.data_dir) / "memory"
+            sessions_dir = memory_dir / "sessions"
+            sessions_dir.mkdir(parents=True, exist_ok=True)
+
+            title = inputs.get("title", "Session").strip()
+            summary = inputs.get("summary", "").strip()
+            if not summary:
+                return json.dumps({"error": "summary is required"})
+
+            timestamp = datetime.utcnow().strftime("%Y-%m-%d-%H%M")
+            safe_title = "".join(c if c.isalnum() or c in " -" else "" for c in title).strip().replace(" ", "-")[:50]
+            fname = f"{timestamp}-{safe_title}.md"
+            content = f"# {title}\n\n{summary}\n"
+            (sessions_dir / fname).write_text(content)
+            return json.dumps({"ok": True, "saved_to": f"sessions/{fname}"})
 
         else:
             return json.dumps({"error": f"Unknown tool: {name}"})

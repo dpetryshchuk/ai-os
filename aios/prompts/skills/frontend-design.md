@@ -1,3 +1,9 @@
+---
+name: frontend-design
+description: Use when editing React/Tailwind UI components in the aios frontend.
+tags: [frontend, react, tailwind, typescript]
+---
+
 # Skill: Frontend Design
 
 Use this skill when editing React/Tailwind UI components in the aios frontend.
