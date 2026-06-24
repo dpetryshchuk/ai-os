@@ -51,6 +51,10 @@ services:
       DAILY_LOG_DATABASE_URL: postgresql://daily_log:${DAILY_LOG_DB_PASSWORD}@postgres:5432/daily_log
       REDIS_URL: redis://redis:6379/0
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      PANDADOC_API_KEY: ${PANDADOC_API_KEY}
+      DATA_DIR: /app/data
+    volumes:
+      - okf_data:/app/data
     depends_on:
       - redis
       - postgres
