@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY aios/main.py aios/config.py aios/db.py aios/schemas.py aios/models.py aios/events.py aios/agent.py aios/tasks.py aios/okf_db.py aios/pandadoc.py ./
 COPY aios/prompts ./prompts
 COPY aios/routers ./routers
+COPY aios/services ./services
 COPY aios/workers ./workers
 COPY aios/alembic ./alembic
 COPY aios/alembic.ini .

@@ -11,7 +11,7 @@ import litellm
 
 import db
 from config import settings
-from routers import daily_log, home, ideas, jobsearch, look, webhooks, writing, proposals, revenue, outreach, transcribe
+from routers import daily_log, home, ideas, jobsearch, look, webhooks, writing, proposals, revenue, outreach, transcribe, sessions
 
 
 def _configure_litellm() -> None:
@@ -60,6 +60,7 @@ app.include_router(proposals.router, prefix="/api/proposals")
 app.include_router(revenue.router, prefix="/api/revenue")
 app.include_router(outreach.router, prefix="/api/outreach")
 app.include_router(transcribe.router, prefix="/api/transcribe")
+app.include_router(sessions.router)
 
 
 @app.get("/api/health")

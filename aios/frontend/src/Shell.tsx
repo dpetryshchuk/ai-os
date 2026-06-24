@@ -8,15 +8,16 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Clock,
   FileText,
   Home,
   Lightbulb,
   Megaphone,
   Menu,
-  MessageSquare,
   PenLine,
   Pin,
   PinOff,
+  Plus,
   Send,
   Sparkles,
   Target,
@@ -48,7 +49,6 @@ const WORKFLOWS: WorkflowSection[] = [
     path: '/jobsearch',
     icon: BriefcaseIcon,
     subnav: [
-      { label: 'Chat', path: '/jobsearch/chat', icon: MessageSquare },
       { label: 'Pipeline', path: '/jobsearch/pipeline', icon: Users },
       { label: 'Leads', path: '/jobsearch/leads', icon: Target },
       { label: 'Applications', path: '/jobsearch/applications', icon: FileText },
@@ -246,20 +246,48 @@ function ImaMsgBubble({ msg }: { msg: ImaMsg }) {
   )
 }
 
-function ImaPanel({ onClose, onTogglePin, pinned }: { onClose: () => void; onTogglePin: () => void; pinned: boolean }) {
+function ImaPanel({
+  onClose,
+  onTogglePin,
+  pinned,
+  initialSession,
+}: {
+  onClose: () => void
+  onTogglePin: () => void
+  pinned: boolean
+  initialSession?: { id: string; messages: Array<{ role: string; content: string }> } | null
+}) {
   const [messages, setMessages] = useState<ImaMsg[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [historyList, setHistoryList] = useState<Array<{ id: string; title: string; domain: string; updated_at: string }>>([])
   const endRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const historyRef = useRef<{ role: string; content: string }[]>([])
   const thinkingIdxRef = useRef(0)
+  const sessionIdRef = useRef<string | null>(null)
+  const currentDomain = IS_OKF ? 'business' : 'personal'
+  const otherDomain = IS_OKF ? 'https://home.dmytropetryshchuk.com' : 'https://onekeyflow.com'
+  const otherDomainLabel = IS_OKF ? '→ Personal' : '→ OKF'
 
   const updateMsg = useCallback((id: string, up: (m: ImaMsg) => ImaMsg) => {
     setMessages(prev => prev.map(m => m.id === id ? up(m) : m))
   }, [])
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  useEffect(() => {
+    if (!initialSession) return
+    sessionIdRef.current = initialSession.id
+    const displayMsgs: ImaMsg[] = initialSession.messages.map((m, i) => ({
+      id: `loaded-${i}`,
+      role: m.role === 'user' ? 'user' : 'agent',
+      text: m.content,
+    }))
+    setMessages(displayMsgs)
+    historyRef.current = initialSession.messages
+  }, [initialSession])
 
   const send = useCallback(async () => {
     const text = input.trim()
@@ -313,8 +341,26 @@ function ImaPanel({ onClose, onTogglePin, pinned }: { onClose: () => void; onTog
       const msg = err instanceof Error ? err.message : 'Error'
       updateMsg(aid, m => ({ ...m, text: `Error: ${msg}`, thinking: false }))
       historyRef.current = historyRef.current.slice(0, -1)
-    } finally { setStreaming(false) }
-  }, [input, streaming, updateMsg])
+    } finally {
+      setStreaming(false)
+      if (historyRef.current.length > 0) {
+        const title = historyRef.current[0]?.content?.slice(0, 60) ?? 'Chat'
+        fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            session_id: sessionIdRef.current,
+            title,
+            messages: historyRef.current,
+            domain: currentDomain,
+          }),
+        })
+          .then(r => r.json())
+          .then(d => { if (d.ok) sessionIdRef.current = d.id })
+          .catch(() => null)
+      }
+    }
+  }, [input, streaming, updateMsg, currentDomain])
 
   function handleKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
@@ -327,12 +373,64 @@ function ImaPanel({ onClose, onTogglePin, pinned }: { onClose: () => void; onTog
     el.style.height = Math.min(el.scrollHeight, 160) + 'px'
   }
 
+  function loadHistory() {
+    fetch('/api/sessions?limit=30')
+      .then(r => r.json())
+      .then(d => setHistoryList(d.sessions ?? []))
+      .catch(() => null)
+  }
+
+  function toggleHistory() {
+    if (!showHistory) loadHistory()
+    setShowHistory(v => !v)
+  }
+
+  function resumeSession(id: string) {
+    fetch(`/api/sessions/${id}`)
+      .then(r => r.json())
+      .then(d => {
+        if (!d.ok) return
+        const s = d.session
+        sessionIdRef.current = s.id
+        historyRef.current = s.messages
+        const displayMsgs: ImaMsg[] = s.messages.map((m: { role: string; content: string }, i: number) => ({
+          id: `loaded-${i}`,
+          role: m.role === 'user' ? 'user' : 'agent',
+          text: m.content,
+        }))
+        setMessages(displayMsgs)
+        setShowHistory(false)
+      })
+      .catch(() => null)
+  }
+
+  function newChat() {
+    sessionIdRef.current = null
+    historyRef.current = []
+    setMessages([])
+    setShowHistory(false)
+  }
+
   return (
     <div className="flex flex-col h-full bg-background border-l border-border">
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-        <span className="text-sm font-semibold tracking-tight">Ima</span>
+        <button
+          onClick={toggleHistory}
+          title="History"
+          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        >
+          <Clock className="size-3.5" />
+        </button>
+        <span className="text-xs font-semibold">Ima</span>
         <div className="flex items-center gap-1">
+          <button
+            onClick={newChat}
+            title="New chat"
+            className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <Plus className="size-3.5" />
+          </button>
           <button
             onClick={onTogglePin}
             title={pinned ? 'Unpin' : 'Pin to side'}
@@ -350,45 +448,81 @@ function ImaPanel({ onClose, onTogglePin, pinned }: { onClose: () => void; onTog
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-3 py-4">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-2">
-            <div className="size-8 rounded-full bg-foreground/10 flex items-center justify-center">
-              <div className="size-2.5 rounded-full bg-foreground/60" />
-            </div>
-            <p className="text-sm font-medium">Ask Ima anything</p>
-            <p className="text-xs text-muted-foreground">Accessible from every page</p>
+      {showHistory ? (
+        <div className="flex-1 overflow-y-auto">
+          <div className="px-3 py-3 flex flex-col gap-1">
+            {historyList.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-8">No past sessions yet</p>
+            ) : (
+              historyList.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => resumeSession(s.id)}
+                  className="text-left px-3 py-2.5 rounded-lg hover:bg-muted transition-colors"
+                >
+                  <p className="text-sm font-medium truncate">{s.title || 'Untitled'}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {s.domain} · {new Date(s.updated_at).toLocaleDateString()}
+                  </p>
+                </button>
+              ))
+            )}
           </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {messages.map(m => <ImaMsgBubble key={m.id} msg={m} />)}
-            <div ref={endRef} />
-          </div>
-        )}
-      </div>
-
-      {/* Input */}
-      <div className="border-t border-border px-3 py-2 shrink-0">
-        <div className="flex gap-1.5 items-end">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => { setInput(e.target.value); adjustHeight() }}
-            onKeyDown={handleKey}
-            placeholder="Ask Ima..."
-            rows={1}
-            className="flex-1 resize-none rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30 min-h-[36px] max-h-[160px] transition-all"
-          />
-          <button
-            onClick={send}
-            disabled={streaming || !input.trim()}
-            className="shrink-0 flex items-center justify-center size-9 rounded-lg bg-foreground text-background disabled:opacity-40 hover:opacity-80 transition-opacity"
-          >
-            <Send size={14} />
-          </button>
         </div>
-      </div>
+      ) : (
+        <>
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto px-3 py-4">
+            {messages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-2 text-center px-2">
+                <div className="size-8 rounded-full bg-foreground/10 flex items-center justify-center">
+                  <div className="size-2.5 rounded-full bg-foreground/60" />
+                </div>
+                <p className="text-sm font-medium">Ask Ima anything</p>
+                <p className="text-xs text-muted-foreground">Accessible from every page</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {messages.map(m => <ImaMsgBubble key={m.id} msg={m} />)}
+                <div ref={endRef} />
+              </div>
+            )}
+          </div>
+
+          {/* Input */}
+          <div className="border-t border-border px-3 py-2 shrink-0">
+            <div className="flex gap-1.5 items-end">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={e => { setInput(e.target.value); adjustHeight() }}
+                onKeyDown={handleKey}
+                placeholder="Ask Ima..."
+                rows={1}
+                className="flex-1 resize-none rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring/30 min-h-[36px] max-h-[160px] transition-all"
+              />
+              <button
+                onClick={send}
+                disabled={streaming || !input.trim()}
+                className="shrink-0 flex items-center justify-center size-9 rounded-lg bg-foreground text-background disabled:opacity-40 hover:opacity-80 transition-opacity"
+              >
+                <Send size={14} />
+              </button>
+            </div>
+            <div className="mt-1.5 flex items-center justify-between">
+              <p className="text-[10px] text-muted-foreground">Enter to send · Shift+Enter for newline</p>
+              {sessionIdRef.current && (
+                <a
+                  href={`${otherDomain}?session=${sessionIdRef.current}`}
+                  className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline transition-colors"
+                >
+                  {otherDomainLabel}
+                </a>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -398,12 +532,30 @@ export default function Shell() {
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [imaOpen, setImaOpen] = useState(false)
   const [imaPinned, setImaPinned] = useState(false)
+  const [preloadedSession, setPreloadedSession] = useState<{ id: string; messages: Array<{ role: string; content: string }> } | null>(null)
 
   useEffect(() => {
     if (IS_OKF) {
       document.documentElement.classList.add('dark')
     } else {
       document.documentElement.classList.remove('dark')
+    }
+  }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const sessionParam = params.get('session')
+    if (sessionParam) {
+      fetch(`/api/sessions/${sessionParam}`)
+        .then(r => r.json())
+        .then(d => {
+          if (d.ok && d.session?.messages?.length > 0) {
+            setPreloadedSession({ id: d.session.id, messages: d.session.messages })
+            setImaOpen(true)
+          }
+        })
+        .catch(() => null)
+      window.history.replaceState({}, '', window.location.pathname)
     }
   }, [])
 
@@ -424,123 +576,126 @@ export default function Shell() {
   })
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden">
       {showShortcuts && <ShortcutHelperModal onClose={() => setShowShortcuts(false)} isOkf={IS_OKF} />}
 
-      {/* Mobile backdrop */}
-      {open && (
-        <div
-          className="fixed inset-0 z-20 bg-black/40 md:hidden"
-          onClick={() => setOpen(false)}
-          role="button"
-          tabIndex={0}
-          aria-label="Close menu"
-          onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setOpen(false)}
-        />
-      )}
-
-      {/* Ima drawer backdrop (mobile/narrow) */}
-      {imaOpen && !imaPinned && (
-        <div
-          className="fixed inset-0 z-40 bg-black/20 md:hidden"
-          onClick={() => setImaOpen(false)}
-        />
-      )}
-
-      {/* Sidebar — drawer on mobile, fixed (and collapsible) column on desktop */}
-      <aside
+      {/* Full-width top bar — Ima trigger */}
+      <button
+        onClick={() => setImaOpen(o => !o)}
         className={cn(
-          'fixed inset-y-0 left-0 z-30 shrink-0 border-r border-border bg-background flex flex-col transition-all duration-200',
-          'md:relative md:translate-x-0',
-          collapsed ? 'md:w-14' : 'md:w-52',
-          'w-52',
-          open ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+          'hidden md:flex w-full items-center justify-center gap-2 py-2 shrink-0 border-b border-border transition-colors z-10',
+          imaOpen
+            ? 'bg-foreground text-background'
+            : 'bg-background text-foreground hover:bg-muted',
         )}
       >
-        <div className={cn(
-          'border-b border-border flex items-center',
-          collapsed ? 'p-2 justify-center' : 'p-4 justify-between',
-        )}>
-          {!collapsed && <span className="text-sm font-semibold tracking-tight">AI OS</span>}
-          <button
-            className="hidden md:inline-flex p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
-            onClick={() => setCollapsed(c => !c)}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
-          </button>
-          <button
-            className="md:hidden text-muted-foreground hover:text-foreground"
+        <div className={cn('size-2 rounded-full', imaOpen ? 'bg-background' : 'bg-green-400')} />
+        <span>Talk to Ima</span>
+      </button>
+
+      {/* Sidebar + content row */}
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Mobile backdrop */}
+        {open && (
+          <div
+            className="fixed inset-0 z-20 bg-black/40 md:hidden"
             onClick={() => setOpen(false)}
+            role="button"
+            tabIndex={0}
             aria-label="Close menu"
-          >
-            <X className="size-4" />
-          </button>
+            onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && setOpen(false)}
+          />
+        )}
+
+        {/* Ima drawer backdrop (mobile/narrow) */}
+        {imaOpen && !imaPinned && (
+          <div
+            className="fixed inset-0 z-40 bg-black/20 md:hidden"
+            onClick={() => setImaOpen(false)}
+          />
+        )}
+
+        {/* Sidebar — drawer on mobile, fixed (and collapsible) column on desktop */}
+        <aside
+          className={cn(
+            'fixed inset-y-0 left-0 z-30 shrink-0 border-r border-border bg-background flex flex-col transition-all duration-200',
+            'md:relative md:translate-x-0',
+            collapsed ? 'md:w-14' : 'md:w-52',
+            'w-52',
+            open ? 'translate-x-0' : '-translate-x-full md:translate-x-0',
+          )}
+        >
+          <div className={cn(
+            'border-b border-border flex items-center',
+            collapsed ? 'p-2 justify-center' : 'p-4 justify-between',
+          )}>
+            {!collapsed && <span className="text-sm font-semibold tracking-tight">AI OS</span>}
+            <button
+              className="hidden md:inline-flex p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted"
+              onClick={() => setCollapsed(c => !c)}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
+            </button>
+            <button
+              className="md:hidden text-muted-foreground hover:text-foreground"
+              onClick={() => setOpen(false)}
+              aria-label="Close menu"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
+          <nav className="flex-1 overflow-y-auto p-2 flex flex-col gap-0.5">
+            {(IS_OKF ? BUSINESS : WORKFLOWS).map((item) => (
+              <NavItem key={item.path} item={item} collapsed={collapsed} onNavigate={() => setOpen(false)} />
+            ))}
+          </nav>
+        </aside>
+
+        {/* Main content + right panel wrapper */}
+        <div className="flex-1 flex min-w-0 overflow-hidden">
+          <main className="flex-1 overflow-y-auto flex flex-col min-w-0">
+            {/* Mobile top bar */}
+            <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-border bg-background md:hidden">
+              <button
+                onClick={() => setOpen(true)}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="Open menu"
+              >
+                <Menu className="size-5" />
+              </button>
+              <span className="text-sm font-semibold tracking-tight">AI OS</span>
+            </div>
+
+            <Outlet />
+          </main>
+
+          {/* Ima panel — pinned (in-flow) */}
+          {imaOpen && imaPinned && (
+            <div className="w-[380px] shrink-0 flex flex-col">
+              <ImaPanel
+                onClose={() => { setImaOpen(false); setImaPinned(false) }}
+                onTogglePin={() => setImaPinned(false)}
+                pinned={true}
+                initialSession={preloadedSession}
+              />
+            </div>
+          )}
         </div>
-        <nav className="flex-1 overflow-y-auto p-2 flex flex-col gap-0.5">
-          {(IS_OKF ? BUSINESS : WORKFLOWS).map((item) => (
-            <NavItem key={item.path} item={item} collapsed={collapsed} onNavigate={() => setOpen(false)} />
-          ))}
-        </nav>
-      </aside>
 
-      {/* Main content + right panel wrapper */}
-      <div className="flex-1 flex min-w-0 overflow-hidden">
-        <main className="flex-1 overflow-y-auto flex flex-col min-w-0">
-          {/* Mobile top bar */}
-          <div className="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 border-b border-border bg-background md:hidden">
-            <button
-              onClick={() => setOpen(true)}
-              className="text-muted-foreground hover:text-foreground"
-              aria-label="Open menu"
-            >
-              <Menu className="size-5" />
-            </button>
-            <span className="text-sm font-semibold tracking-tight">AI OS</span>
-          </div>
-
-          {/* Desktop top bar with Ima trigger */}
-          <div className="hidden md:flex items-center justify-end px-4 py-1.5 border-b border-border bg-background shrink-0">
-            <button
-              onClick={() => setImaOpen(o => !o)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium transition-colors',
-                imaOpen
-                  ? 'bg-foreground text-background'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted border border-border',
-              )}
-            >
-              <div className="size-1.5 rounded-full bg-green-400" />
-              Ima
-            </button>
-          </div>
-
-          <Outlet />
-        </main>
-
-        {/* Ima panel — pinned (in-flow) */}
-        {imaOpen && imaPinned && (
-          <div className="w-[380px] shrink-0 flex flex-col">
+        {/* Ima panel — drawer (fixed overlay), starts below the top bar */}
+        {imaOpen && !imaPinned && (
+          <div className="fixed right-0 top-9 bottom-0 z-50 w-[380px] shadow-2xl flex flex-col">
             <ImaPanel
-              onClose={() => { setImaOpen(false); setImaPinned(false) }}
-              onTogglePin={() => setImaPinned(false)}
-              pinned={true}
+              onClose={() => setImaOpen(false)}
+              onTogglePin={() => setImaPinned(true)}
+              pinned={false}
+              initialSession={preloadedSession}
             />
           </div>
         )}
       </div>
-
-      {/* Ima panel — drawer (fixed overlay) */}
-      {imaOpen && !imaPinned && (
-        <div className="fixed right-0 top-0 bottom-0 z-50 w-[380px] shadow-2xl flex flex-col">
-          <ImaPanel
-            onClose={() => setImaOpen(false)}
-            onTogglePin={() => setImaPinned(true)}
-            pinned={false}
-          />
-        </div>
-      )}
     </div>
   )
 }
