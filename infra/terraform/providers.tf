@@ -9,9 +9,9 @@ terraform {
       source  = "hetznercloud/hcloud"
       version = "~> 1.48"
     }
-    cloudflare = {
-      source  = "cloudflare/cloudflare"
-      version = "~> 4.40"
+    porkbun = {
+      source  = "kyswtn/porkbun"
+      version = "~> 0.1"
     }
     github = {
       source  = "integrations/github"
@@ -31,8 +31,9 @@ provider "hcloud" {
   token = var.hcloud_token
 }
 
-provider "cloudflare" {
-  api_token = var.cloudflare_api_token
+provider "porkbun" {
+  api_key        = var.porkbun_api_key
+  secret_api_key = var.porkbun_secret_api_key
 }
 
 provider "github" {

@@ -8,8 +8,14 @@ variable "hcloud_token" {
   sensitive   = true # marks the value so it's never printed in plan/apply output
 }
 
-variable "cloudflare_api_token" {
-  description = "Cloudflare API token with DNS:Edit scope on the relevant zones."
+variable "porkbun_api_key" {
+  description = "Porkbun API key (Porkbun dashboard → API Access)."
+  type        = string
+  sensitive   = true
+}
+
+variable "porkbun_secret_api_key" {
+  description = "Porkbun secret API key (shown once when you create the API key)."
   type        = string
   sensitive   = true
 }

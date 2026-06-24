@@ -94,40 +94,28 @@ resource "hcloud_server" "vps" {
 }
 
 
-# ---------- 4. DNS records (Cloudflare) ---------------------------------------
-# `data` blocks READ existing things (vs `resource` which manages them).
-# We look up the zone IDs by name so we don't hardcode them.
-data "cloudflare_zone" "primary" {
-  name = var.primary_domain # dmytropetryshchuk.com
-}
-
-data "cloudflare_zone" "secondary" {
-  name = var.secondary_domain # onekeyflow.com
-}
-
-# `for_each` turns a list into N resources of the same shape. Each entry in
-# var.primary_subdomains creates one A record. This is how you avoid copy-
-# pasting "resource ... home ... resource ... jobsearch ...".
-resource "cloudflare_record" "primary_app" {
+# ---------- 4. DNS records (Porkbun) ------------------------------------------
+# Porkbun doesn't require a zone lookup — you reference the domain directly.
+# `for_each` turns a list into N records of the same shape. Each entry in
+# var.primary_subdomains creates one A record, e.g. home.dmytropetryshchuk.com.
+resource "porkbun_dns_record" "primary_app" {
   for_each = toset(var.primary_subdomains)
 
-  zone_id = data.cloudflare_zone.primary.id
+  domain  = var.primary_domain
   name    = each.key                       # "home", "jobsearch", ...
-  content = hcloud_server.vps.ipv4_address # implicit dependency: TF will wait for the server first
   type    = "A"
-  proxied = false # Caddy handles TLS itself, so we want a plain DNS record (no Cloudflare proxy)
-  ttl     = 300
+  content = hcloud_server.vps.ipv4_address # implicit dependency: TF waits for the server first
+  ttl     = "300"
 }
 
-resource "cloudflare_record" "secondary_app" {
+resource "porkbun_dns_record" "secondary_app" {
   for_each = toset(var.secondary_subdomains)
 
-  zone_id = data.cloudflare_zone.secondary.id
+  domain  = var.secondary_domain
   name    = each.key
-  content = hcloud_server.vps.ipv4_address
   type    = "A"
-  proxied = false
-  ttl     = 300
+  content = hcloud_server.vps.ipv4_address
+  ttl     = "300"
 }
 
 
