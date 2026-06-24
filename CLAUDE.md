@@ -22,8 +22,8 @@ cd aios/frontend && npm run build            # build → aios/public/
 pytest                                       # tests (from aios/)
 celery -A tasks worker --loglevel=info       # background worker
 celery -A tasks beat --loglevel=info         # scheduler
-alembic upgrade head                         # jobsearch DB migrations
-alembic -c alembic_daily.ini upgrade head    # daily_log DB migrations
+alembic -c migrations/jobsearch.ini upgrade head   # jobsearch DB migrations
+alembic -c migrations/daily_log.ini upgrade head  # daily_log DB migrations
 ```
 
 SSH tunnel for local DB access: `ssh -L 5432:localhost:5432 dima@46.225.78.10`
@@ -34,7 +34,7 @@ SSH tunnel for local DB access: `ssh -L 5432:localhost:5432 dima@46.225.78.10`
 - **Databases:** Two Postgres 16 — `jobsearch` and `daily_log` (asyncpg async routes, psycopg2 Celery workers); SQLite via `aios/services/okf_db.py` for OKF data
 - **Frontend:** React 19 + Vite + Tailwind + Geist + Instrument Serif, built into `aios/public/`
 - **Workers:** Celery + Redis — scrapers and health checks as event-driven tasks
-- **Migrations:** Alembic — `alembic/` jobsearch, `alembic_daily/` daily_log
+- **Migrations:** Alembic — `migrations/jobsearch/` + `migrations/daily_log/`, configs in `migrations/*.ini`
 - **Tests:** pytest + pytest-asyncio + httpx; run `pytest` from `aios/`
 - **Deploy:** GitHub Actions → Docker image → GHCR → VPS via SSH
 

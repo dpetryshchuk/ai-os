@@ -23,10 +23,7 @@ COPY aios/prompts ./prompts
 COPY aios/routers ./routers
 COPY aios/services ./services
 COPY aios/workers ./workers
-COPY aios/alembic ./alembic
-COPY aios/alembic.ini .
-COPY aios/alembic_daily ./alembic_daily
-COPY aios/alembic_daily.ini .
+COPY aios/migrations ./migrations
 
 COPY --from=frontend-builder /app/aios/public ./public
 
