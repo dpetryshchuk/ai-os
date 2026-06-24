@@ -32,6 +32,7 @@ def _import_handlers() -> dict[str, Callable]:
         "scrape.sd": sd_run,
         "scrape.yc": yc_run,
         "scrape.hn": hn_run,
+        "embed.backfill": lambda payload, session: embed_backfill(),
     }
 
 
@@ -181,4 +182,120 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(hour=8, minute=15),
         "args": ["scrape.hn"],
     },
+    "embed-backfill-weekly": {
+        "task": "events.run_scheduled",
+        "schedule": crontab(hour=3, minute=0, day_of_week=0),  # Sunday 3am UTC
+        "args": ["embed.backfill"],
+    },
 }
+
+
+# ── Embedding tasks ───────────────────────────────────────────────────────────
+
+@celery_app.task(name="embed.document")
+def embed_document(source_type: str, source_id: str, text: str) -> None:
+    """Embed a single document and upsert into the embeddings table."""
+    import secrets as _secrets
+    from services.embeddings import embed_sync, _vec_str
+
+    if not text.strip():
+        return
+
+    try:
+        vec = embed_sync(text)
+    except Exception as e:
+        # Don't crash the task queue if embeddings fail (e.g. no API key)
+        print(f"embed_document failed for {source_type}/{source_id}: {e}")
+        return
+
+    vec_str = _vec_str(vec)
+    eid = _secrets.token_hex(8)
+
+    # Use sync psycopg2 connection (same pattern as Celery SyncSession)
+    import psycopg2
+    conn = psycopg2.connect(settings.jobsearch_database_url)
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO embeddings (id, source_type, source_id, chunk_text, embedding)
+                    VALUES (%s, %s, %s, %s, %s::vector)
+                    ON CONFLICT (source_type, source_id)
+                    DO UPDATE SET chunk_text = EXCLUDED.chunk_text,
+                                  embedding  = EXCLUDED.embedding
+                    """,
+                    (eid, source_type, source_id, text[:4000], vec_str),
+                )
+    finally:
+        conn.close()
+
+
+@celery_app.task(name="embed.backfill")
+def embed_backfill() -> dict:
+    """Backfill embeddings for all existing notes and job postings."""
+    import psycopg2
+    import secrets as _secrets
+    from services.embeddings import embed_sync, _vec_str
+
+    conn = psycopg2.connect(settings.jobsearch_database_url)
+    counts = {"notes": 0, "jobs": 0, "errors": 0}
+
+    try:
+        with conn.cursor() as cur:
+            # Notes
+            cur.execute("SELECT id, COALESCE(title,'') || ' ' || COALESCE(content,'') FROM notes WHERE content IS NOT NULL")
+            notes = cur.fetchall()
+
+        for note_id, text in notes:
+            if not text.strip():
+                continue
+            try:
+                vec = embed_sync(text)
+                eid = _secrets.token_hex(8)
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            INSERT INTO embeddings (id, source_type, source_id, chunk_text, embedding)
+                            VALUES (%s, 'note', %s, %s, %s::vector)
+                            ON CONFLICT (source_type, source_id) DO UPDATE
+                            SET chunk_text = EXCLUDED.chunk_text, embedding = EXCLUDED.embedding
+                            """,
+                            (eid, note_id, text[:4000], _vec_str(vec)),
+                        )
+                counts["notes"] += 1
+            except Exception as e:
+                counts["errors"] += 1
+                print(f"backfill note {note_id}: {e}")
+
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, title || ' ' || COALESCE(link,'') FROM job_postings WHERE status != 'dropped'")
+            jobs = cur.fetchall()
+
+        for job_id, text in jobs:
+            if not text.strip():
+                continue
+            try:
+                vec = embed_sync(text)
+                eid = _secrets.token_hex(8)
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            INSERT INTO embeddings (id, source_type, source_id, chunk_text, embedding)
+                            VALUES (%s, 'job_posting', %s, %s, %s::vector)
+                            ON CONFLICT (source_type, source_id) DO UPDATE
+                            SET chunk_text = EXCLUDED.chunk_text, embedding = EXCLUDED.embedding
+                            """,
+                            (eid, job_id, text[:4000], _vec_str(vec)),
+                        )
+                counts["jobs"] += 1
+            except Exception as e:
+                counts["errors"] += 1
+                print(f"backfill job {job_id}: {e}")
+
+    finally:
+        conn.close()
+
+    return counts

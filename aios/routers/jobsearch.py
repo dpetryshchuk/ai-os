@@ -13,6 +13,7 @@ from workers.scrapers.jobspy_scraper import DEFAULT_CONFIG as JOBSPY_DEFAULTS, S
 import db
 from agent import agentic_stream
 from config import settings
+from services import embeddings as emb_svc
 from schemas import (
     AgentStreamRequest,
     ApplicationsResponse,
@@ -281,6 +282,8 @@ async def create_note(body: NoteCreate, pool: asyncpg.Pool = Depends(db.get_jobs
         "RETURNING id, category, title, url, content, created_at",
         nid, body.category, body.title, body.url, body.content,
     )
+    from tasks import embed_document
+    embed_document.delay("note", nid, f"{body.title or ''} {body.content or ''}".strip())
     return NoteResponse(note=NoteRow.model_validate(dict(row)))
 
 
@@ -298,7 +301,10 @@ async def update_note(note_id: str, body: NoteUpdate, pool: asyncpg.Pool = Depen
     )
     if not row:
         raise HTTPException(404, "Note not found")
-    return NoteResponse(note=NoteRow.model_validate(dict(row)))
+    note = NoteRow.model_validate(dict(row))
+    from tasks import embed_document
+    embed_document.delay("note", note_id, f"{note.title or ''} {note.content or ''}".strip())
+    return NoteResponse(note=note)
 
 
 @router.delete("/notes/{note_id}")
@@ -438,9 +444,21 @@ async def reset_scraper_settings(
 
 # ── Trigger ────────────────────────────────────────────────────────────────────
 
+@router.get("/semantic-search")
+async def semantic_search(
+    q: str,
+    limit: int = 8,
+    pool: asyncpg.Pool = Depends(db.get_jobsearch_pool),
+):
+    if not q.strip():
+        return {"ok": True, "results": []}
+    results = await emb_svc.search(pool, q, limit)
+    return {"ok": True, "results": results}
+
+
 @router.post("/trigger/{task_type}")
 async def trigger_task(task_type: str, pool: asyncpg.Pool = Depends(db.get_jobsearch_pool)) -> TriggerResponse:
-    allowed = {"scrape.sd", "scrape.yc", "scrape.hn"}
+    allowed = {"scrape.sd", "scrape.yc", "scrape.hn", "embed.backfill"}
     if task_type not in allowed:
         raise HTTPException(400, f"Unknown task type: {task_type}")
     import events as ev

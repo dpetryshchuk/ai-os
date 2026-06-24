@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     daily_log_database_url: str = "postgresql://daily_log:daily_log@localhost:5432/daily_log"
     redis_url: str = "redis://redis:6379/0"
     deepseek_api_key: str = ""
+    openai_api_key: str = ""
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     uploads_dir: str = "/app/uploads"

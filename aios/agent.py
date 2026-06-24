@@ -440,6 +440,21 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "semantic_search",
+            "description": "Search across notes and job postings by semantic meaning (not just keywords). Use when the user asks about topics, themes, or content they've written or saved. Returns the most relevant chunks with similarity scores.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "What to search for — describe the topic or paste a phrase"},
+                    "limit": {"type": "integer", "description": "Max results, default 8"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "run_shell",
             "description": "Run a shell command in the repo. Use for: npm builds, git operations (status, diff, merge, rebase, conflict resolution), running tests, grep, find, any CLI task. Returns stdout, stderr, exit_code. Default cwd is /repo (the git repo root).",
             "parameters": {
@@ -864,6 +879,15 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             content = f"# {title}\n\n{summary}\n"
             (sessions_dir / fname).write_text(content)
             return json.dumps({"ok": True, "saved_to": f"sessions/{fname}"})
+
+        elif name == "semantic_search":
+            from services import embeddings as emb_svc
+            query = inputs.get("query", "").strip()
+            limit = inputs.get("limit", 8)
+            if not query:
+                return json.dumps({"error": "query is required"})
+            results = await emb_svc.search(pool, query, limit)
+            return json.dumps({"results": results}, default=str)
 
         elif name == "run_shell":
             import subprocess

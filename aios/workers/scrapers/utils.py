@@ -171,6 +171,7 @@ def sync_jobs_to_db(jobs: list[ScrapedJob]) -> dict:
                 existing = posting_map.get(key)
 
                 if not existing:
+                    job_id = _new_id()
                     with conn.cursor() as cur:
                         from datetime import date, datetime, timezone
                         cur.execute(
@@ -178,13 +179,18 @@ def sync_jobs_to_db(jobs: list[ScrapedJob]) -> dict:
                             "(id, company_id, title, link, source, scraped_date, scraped_at, status, description, location) "
                             "VALUES (%s, %s, %s, %s, %s, %s, %s, 'new', %s, %s)",
                             (
-                                _new_id(), company_id, job.job_title, job.job_link,
+                                job_id, company_id, job.job_title, job.job_link,
                                 source, date.today().isoformat(),
                                 datetime.now(timezone.utc),
                                 job.description, job.location,
                             ),
                         )
                     conn.commit()
+                    try:
+                        from tasks import embed_document
+                        embed_document.delay("job_posting", job_id, f"{job.job_title} {job.job_link or ''}")
+                    except Exception as _emb_exc:
+                        pass
                     created += 1
                 elif existing["status"] != "new":
                     skipped += 1
