@@ -84,6 +84,82 @@ def run_scheduled(event_type: str) -> None:
     process_event.delay(eid)
 
 
+# ── OKF: proposal generation ──────────────────────────────────────────────────
+
+import json as _json
+from pathlib import Path as _Path
+import litellm as _litellm
+import okf_db as _okf_db
+import pandadoc as _pandadoc
+
+
+def _load_proposal_prompts() -> dict:
+    return _json.loads((_Path(__file__).parent / "prompts" / "proposal.json").read_text())
+
+
+def _call_proposal_llm(prompts: dict, req_data: dict) -> dict:
+    examples = []
+    for msg in prompts["examples"]:
+        content = msg["content"]
+        examples.append({
+            "role": msg["role"],
+            "content": _json.dumps(content) if isinstance(content, dict) else content,
+        })
+    messages = [
+        {"role": "system", "content": "You're a helpful, intelligent sales assistant."},
+        {"role": "user", "content": prompts["instruction"]},
+        *examples,
+        {
+            "role": "user",
+            "content": _json.dumps({
+                "businessDescription": req_data.get("businessDescription", ""),
+                "problem": req_data.get("problem", ""),
+                "solution": req_data.get("solution", ""),
+                "tools": req_data.get("platforms", ""),
+                "timeline": req_data.get("timeline", ""),
+            }),
+        },
+    ]
+    response = _litellm.completion(
+        model="deepseek/deepseek-chat",
+        messages=messages,
+        response_format={"type": "json_object"},
+        temperature=1,
+    )
+    return _json.loads(response.choices[0].message.content)
+
+
+@celery_app.task(bind=True, queue="okf")
+def generate_proposal(self, req_data: dict) -> dict:
+    job_id = self.request.id
+    _okf_db.init()
+    _okf_db.create_event(job_id, "proposal.generate", req_data)
+    _okf_db.start_event(job_id)
+    try:
+        prompts = _load_proposal_prompts()
+        proposal = _call_proposal_llm(prompts, req_data)
+        payload = _pandadoc.build_payload(req_data, proposal)
+        doc_id = _pandadoc.create_document(payload)
+        _pandadoc.wait_for_draft(doc_id)
+        doc_url = f"https://app.pandadoc.com/a/#/documents/{doc_id}"
+        result = {
+            "client": {
+                "firstName": req_data.get("firstName", ""),
+                "lastName": req_data.get("lastName", ""),
+                "company": req_data.get("company", ""),
+                "email": req_data.get("email", ""),
+                "price": req_data.get("price", ""),
+            },
+            "proposal": proposal,
+            "pandadoc": {"id": doc_id, "url": doc_url},
+        }
+        _okf_db.complete_event(job_id, result)
+        return result
+    except Exception as e:
+        _okf_db.fail_event(job_id, str(e))
+        raise
+
+
 # ── Beat schedule ─────────────────────────────────────────────────────────────
 
 celery_app.conf.beat_schedule = {

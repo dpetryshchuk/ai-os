@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     vault_dir: str = "/vault"
     fathom_webhook_secret: str = ""
     supadata_api_key: str = ""
+    pandadoc_api_key: str = ""
+    data_dir: str = "/app/data"
     port: int = 4116
     notify_email: str = ""
     smtp_host: str = "smtp.gmail.com"
