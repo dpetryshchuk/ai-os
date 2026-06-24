@@ -461,8 +461,12 @@ async def trigger_task(task_type: str, pool: asyncpg.Pool = Depends(db.get_jobse
     allowed = {"scrape.sd", "scrape.yc", "scrape.hn", "embed.backfill"}
     if task_type not in allowed:
         raise HTTPException(400, f"Unknown task type: {task_type}")
-    import events as ev
+    import json, secrets as _s
     from tasks import process_event
-    eid = await ev.create(pool, source="ui", type=task_type, payload={})
+    eid = _s.token_hex(8)
+    await pool.execute(
+        "INSERT INTO os_events (id, source, type, payload) VALUES ($1,$2,$3,$4::jsonb)",
+        eid, "ui", task_type, json.dumps({}),
+    )
     process_event.delay(eid)
     return TriggerResponse(event_id=eid)

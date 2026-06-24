@@ -6,7 +6,6 @@ import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 import db
-import events as ev
 from config import settings
 from schemas import WebhookResponse
 from tasks import process_event
@@ -68,7 +67,12 @@ async def receive_webhook(
 
     _verify_signature(source, body, request.headers)
 
-    event_id = await ev.create(pool, source="webhook", type=f"{source}.received", payload=payload)
+    import json, secrets as _s
+    event_id = _s.token_hex(8)
+    await pool.execute(
+        "INSERT INTO os_events (id, source, type, payload) VALUES ($1,$2,$3,$4::jsonb)",
+        event_id, "webhook", f"{source}.received", json.dumps(payload),
+    )
     process_event.delay(event_id)
 
     return WebhookResponse(event_id=event_id)
