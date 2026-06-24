@@ -8,15 +8,15 @@
 - [x] Backfill ran — 209 documents embedded (3 notes, 206 job postings)
 
 ## In Progress 🔄
-- [ ] Knowledge base tab — browse + edit /vault (core-aios-kb Obsidian vault)
-- [ ] Finances tab — port personal-finances dashboard into AIOS
-- [ ] Proposals form redesign — cleaner, more readable
-- [ ] Home page: recent Fathom meetings (meetings saved to vault by webhook)
-- [ ] Evermemos paradigm in Ima chats — end-of-session memory capture
+- [x] Knowledge base tab — browse + edit /vault (commit ab4087d)
+- [x] Finances tab — port personal-finances dashboard into AIOS (commit 0d46bd1)
+- [ ] Proposals form redesign — cleaner, more readable (agent running)
+- [ ] Home page: recent Fathom meetings (agent running)
+- [ ] Evermemos paradigm in Ima chats — end-of-session memory capture (agent running)
+- [ ] Architecture.html — full rewrite explaining every piece technically (agent running)
+- [ ] Codebase cleanup pass (agent running)
 - [ ] Embeddings tracked in Langfuse traces
-- [ ] Architecture.html — full rewrite explaining every piece technically
 - [ ] Infra cleanup + Terraform tutorial section
-- [ ] Codebase cleanup pass
 
 ## Queue 📋
 - [ ] events.py inline (16 lines, used in 2 places)
