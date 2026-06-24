@@ -7,15 +7,12 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import litellm
-
 import db
 from config import settings
 from routers import daily_log, home, ideas, jobsearch, look, webhooks, writing, proposals, revenue, outreach, transcribe, sessions
 
 
 def _configure_litellm() -> None:
-    # Wire Langfuse observability when keys are present.
-    # LiteLLM reads LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY from env automatically.
     if settings.langfuse_public_key and settings.langfuse_secret_key:
         litellm.success_callback = ["langfuse"]
         litellm.failure_callback = ["langfuse"]

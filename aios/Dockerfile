@@ -16,7 +16,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && git config --global --add safe.directory '*'
 
 COPY aios/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    sed -i 's/langfuse\.version\.__version__/langfuse._version.__version__/g' \
+    /usr/local/lib/python3.12/site-packages/litellm/integrations/langfuse/langfuse.py
 
 COPY aios/main.py aios/config.py aios/db.py aios/schemas.py aios/models.py aios/events.py aios/agent.py aios/tasks.py ./
 COPY aios/prompts ./prompts
