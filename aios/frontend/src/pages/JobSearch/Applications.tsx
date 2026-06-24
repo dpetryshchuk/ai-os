@@ -43,6 +43,12 @@ function UploadButton({ appId, currentPath, onUploaded }: UploadButtonProps) {
       const r = await fetch('/api/jobsearch/resumes', { method: 'POST', body: fd })
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       const { path } = await r.json()
+      // Persist to DB
+      await fetch(`/api/jobsearch/applications/${appId}/resume`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      })
       onUploaded(path)
     } finally {
       setUploading(false)

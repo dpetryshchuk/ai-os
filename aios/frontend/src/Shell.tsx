@@ -23,6 +23,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { cn } from './lib/utils'
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 
 const IS_OKF = typeof window !== 'undefined' && window.location.hostname.includes('onekeyflow')
 
@@ -152,6 +153,11 @@ export default function Shell() {
   useEffect(() => {
     window.localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0')
   }, [collapsed])
+
+  useKeyboardShortcuts({
+    onToggleSidebar: () => setCollapsed(c => !c),
+    isOkf: IS_OKF,
+  })
 
   return (
     <div className="flex h-screen overflow-hidden">

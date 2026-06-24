@@ -36,6 +36,7 @@ from schemas import (
     ContactRow,
     RetroFunnel,
     RetroResponse,
+    ResumeUpdateRequest,
     ScraperConfig,
     ScraperSettingsResponse,
     ScraperSettingsUpdate,
@@ -315,6 +316,21 @@ async def upload_resume(file: UploadFile = File(...)) -> ResumeResponse:
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
     return ResumeResponse(path=dest)
+
+
+@router.patch("/applications/{app_id}/resume")
+async def update_application_resume(
+    app_id: str,
+    body: ResumeUpdateRequest,
+    pool: asyncpg.Pool = Depends(db.get_jobsearch_pool),
+) -> OkResponse:
+    row = await pool.fetchrow(
+        "UPDATE job_postings SET resume_path = $2 WHERE id = $1 RETURNING id",
+        app_id, body.path,
+    )
+    if not row:
+        raise HTTPException(404, "Application not found")
+    return OkResponse()
 
 
 # ── Content ────────────────────────────────────────────────────────────────────

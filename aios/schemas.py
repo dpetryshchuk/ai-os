@@ -40,6 +40,10 @@ class LeadStatusUpdate(BaseModel):
     status: Literal["new", "applied", "dropped"]
 
 
+class ResumeUpdateRequest(BaseModel):
+    path: str
+
+
 class ScraperConfig(BaseModel):
     search_terms: list[str] = []
     locations: list[str] = []

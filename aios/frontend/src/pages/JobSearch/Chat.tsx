@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { ChevronRight, Send } from 'lucide-react'
+import { ChevronRight, Mic, MicOff, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const STREAM_URL = '/api/jobsearch/agents/stream'
@@ -78,7 +78,7 @@ function MessageBubble({ msg }: { msg: Message }) {
   return (
     <div className="flex justify-start">
       <div className="max-w-[680px] w-full flex flex-col items-start gap-1">
-        <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground px-1">Jobby</p>
+        <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground px-1">Ima</p>
         <div className="rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm leading-relaxed border border-border bg-card w-full">
           {msg.thinking ? (
             <span className="text-muted-foreground text-sm animate-pulse">{msg.text || 'Thinking...'}</span>
@@ -109,6 +109,40 @@ export default function Chat() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const activeThinkingRef = useRef(0)
   const historyRef = useRef<{ role: string; content: string }[]>([])
+
+  // Mic button state
+  const [listening, setListening] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null)
+
+  const toggleVoice = useCallback(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SpeechRec = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
+    if (!SpeechRec) { alert('Speech recognition not supported in this browser.'); return }
+
+    if (listening) {
+      recognitionRef.current?.stop()
+      setListening(false)
+      return
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rec: any = new SpeechRec()
+    rec.continuous = false
+    rec.interimResults = false
+    rec.lang = 'en-US'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
+      const transcript = e.results[0][0].transcript
+      setInput(prev => (prev ? prev + ' ' + transcript : transcript))
+      setListening(false)
+    }
+    rec.onerror = () => setListening(false)
+    rec.onend = () => setListening(false)
+    rec.start()
+    recognitionRef.current = rec
+    setListening(true)
+  }, [listening])
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
@@ -201,6 +235,10 @@ export default function Chat() {
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>): void {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+    if (e.altKey && (e.key === 'm' || e.key === 'M')) {
+      e.preventDefault()
+      toggleVoice()
+    }
   }
 
   return (
@@ -231,10 +269,23 @@ export default function Chat() {
               value={input}
               onChange={e => { setInput(e.target.value); adjustHeight() }}
               onKeyDown={handleKeyDown}
-              placeholder="Message Jobby..."
+              placeholder="Message Ima..."
               rows={1}
               className="flex-1 resize-none rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 transition-all min-h-[48px] max-h-[200px]"
             />
+            <button
+              onClick={toggleVoice}
+              className={cn(
+                'shrink-0 rounded-lg p-2 transition-colors',
+                listening
+                  ? 'bg-destructive text-destructive-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+              )}
+              title="Voice input (Alt+M)"
+              type="button"
+            >
+              {listening ? <MicOff className="size-4" /> : <Mic className="size-4" />}
+            </button>
             <button
               onClick={send}
               disabled={streaming || !input.trim()}
