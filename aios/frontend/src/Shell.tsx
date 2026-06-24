@@ -134,8 +134,77 @@ function NavItem({
   )
 }
 
+const PERSONAL_SHORTCUTS = [
+  { key: 'Option+1', action: 'Home' },
+  { key: 'Option+2', action: 'Events' },
+  { key: 'Option+3', action: 'Ideas' },
+  { key: 'Option+4', action: 'Job Search' },
+  { key: 'Option+5', action: 'Writing' },
+  { key: 'Option+6', action: 'Daily Log' },
+  { key: 'Option+7', action: 'Look' },
+  { key: 'Option+C', action: 'Chat with Ima' },
+  { key: 'Option+M', action: 'Voice input (mic)' },
+  { key: ']', action: 'Toggle sidebar' },
+  { key: '?', action: 'Show this help' },
+]
+
+const BUSINESS_SHORTCUTS = [
+  { key: 'Option+1', action: 'Proposals' },
+  { key: 'Option+2', action: 'Revenue' },
+  { key: 'Option+3', action: 'Outreach' },
+  { key: 'Option+4', action: 'Events' },
+  { key: 'Option+C', action: 'Proposals' },
+  { key: 'Option+M', action: 'Voice input (mic)' },
+  { key: ']', action: 'Toggle sidebar' },
+  { key: '?', action: 'Show this help' },
+]
+
+function ShortcutHelperModal({ onClose, isOkf }: { onClose: () => void; isOkf: boolean }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === '?') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+
+  const shortcuts = isOkf ? BUSINESS_SHORTCUTS : PERSONAL_SHORTCUTS
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Keyboard shortcuts"
+    >
+      <div
+        className="bg-background border border-border rounded-xl shadow-xl p-6 w-80 max-w-[90vw]"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm font-semibold tracking-tight">Keyboard Shortcuts</p>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {shortcuts.map(({ key, action }) => (
+            <div key={key} className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{action}</span>
+              <kbd className="px-2 py-0.5 text-xs rounded border border-border bg-muted font-mono">{key}</kbd>
+            </div>
+          ))}
+        </div>
+        <p className="mt-4 text-[10px] text-muted-foreground text-center">Press ? or Esc to close</p>
+      </div>
+    </div>
+  )
+}
+
 export default function Shell() {
   const [open, setOpen] = useState(false)
+  const [showShortcuts, setShowShortcuts] = useState(false)
 
   useEffect(() => {
     if (IS_OKF) {
@@ -156,11 +225,13 @@ export default function Shell() {
 
   useKeyboardShortcuts({
     onToggleSidebar: () => setCollapsed(c => !c),
+    onShowShortcuts: () => setShowShortcuts(s => !s),
     isOkf: IS_OKF,
   })
 
   return (
     <div className="flex h-screen overflow-hidden">
+      {showShortcuts && <ShortcutHelperModal onClose={() => setShowShortcuts(false)} isOkf={IS_OKF} />}
       {/* Mobile backdrop */}
       {open && (
         <div
