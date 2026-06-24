@@ -12,22 +12,22 @@ _PROMPTS_DIR = Path(__file__).parent / "prompts"
 
 def _load_instructions() -> str:
     from config import settings
-    base = (_PROMPTS_DIR / "ima.md").read_text()
+    try:
+        base = (_PROMPTS_DIR / "ima.md").read_text()
+    except OSError:
+        base = "You are Ima, an AI assistant."
 
-    memory_dir = Path(settings.data_dir) / "memory"
     sections = []
-
-    user_file = memory_dir / "USER.md"
-    if user_file.exists():
-        content = user_file.read_text().strip()
-        if content:
-            sections.append(f"\n\n---\n## About the user (from USER.md)\n{content}")
-
-    memory_file = memory_dir / "MEMORY.md"
-    if memory_file.exists():
-        content = memory_file.read_text().strip()
-        if content:
-            sections.append(f"\n\n---\n## Accumulated memory (from MEMORY.md)\n{content}")
+    try:
+        memory_dir = Path(settings.data_dir) / "memory"
+        for fname, label in [("USER.md", "About the user"), ("MEMORY.md", "Accumulated memory")]:
+            f = memory_dir / fname
+            if f.exists():
+                content = f.read_text().strip()
+                if content:
+                    sections.append(f"\n\n---\n## {label} (from {fname})\n{content}")
+    except Exception:
+        pass
 
     return base + "".join(sections)
 
