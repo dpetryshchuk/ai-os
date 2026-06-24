@@ -471,21 +471,7 @@ class LookItemResponse(OkResponse):
     item: LookItemRow
 
 
-# ─── Home — rows ──────────────────────────────────────────────────────────────
-
-
-class AppEntry(BaseModel):
-    name: str
-    url: str
-    description: str
-    section: str
-
-
 # ─── Home — responses ─────────────────────────────────────────────────────────
-
-
-class AppsResponse(OkResponse):
-    apps: list[AppEntry]
 
 
 class HealthResponse(OkResponse):

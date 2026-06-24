@@ -31,8 +31,10 @@ def init() -> None:
         """)
 
 
+init()
+
+
 def save(session_id: str | None, title: str, messages: list, domain: str) -> str:
-    init()
     now = datetime.utcnow().isoformat()
     if session_id:
         with _conn() as c:
@@ -51,7 +53,6 @@ def save(session_id: str | None, title: str, messages: list, domain: str) -> str
 
 
 def list_all(limit: int = 30) -> list:
-    init()
     with _conn() as c:
         rows = c.execute(
             """SELECT id, title, domain, created_at, updated_at
@@ -64,7 +65,6 @@ def list_all(limit: int = 30) -> list:
 
 
 def get(session_id: str) -> dict | None:
-    init()
     with _conn() as c:
         row = c.execute("SELECT * FROM chat_sessions WHERE id=?", (session_id,)).fetchone()
     if not row:
@@ -75,6 +75,5 @@ def get(session_id: str) -> dict | None:
 
 
 def delete(session_id: str) -> None:
-    init()
     with _conn() as c:
         c.execute("DELETE FROM chat_sessions WHERE id=?", (session_id,))

@@ -5,6 +5,7 @@ from services import okf_db
 from tasks import celery_app, generate_proposal
 
 router = APIRouter()
+okf_db.init()
 
 
 class ProposalRequest(BaseModel):
@@ -38,5 +39,4 @@ def get_status(job_id: str):
 
 @router.get("/events")
 def get_events(limit: int = 100):
-    okf_db.init()
     return {"ok": True, "events": okf_db.list_events(limit)}

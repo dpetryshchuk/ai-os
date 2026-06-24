@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from services import okf_db
 
 router = APIRouter()
+okf_db.init()
 
 
 class MonthEntry(BaseModel):
@@ -18,13 +19,11 @@ class MonthEntry(BaseModel):
 
 @router.get("")
 def get_revenue():
-    okf_db.init()
     return {"ok": True, "months": okf_db.get_all_months()}
 
 
 @router.post("")
 def create_revenue(body: MonthEntry):
-    okf_db.init()
     try:
         month = okf_db.create_month(body.model_dump())
         return {"ok": True, "month": month}
@@ -36,7 +35,6 @@ def create_revenue(body: MonthEntry):
 
 @router.put("/{month_id}")
 def update_revenue(month_id: int, body: MonthEntry):
-    okf_db.init()
     month = okf_db.update_month(month_id, body.model_dump())
     if not month:
         raise HTTPException(404, "Not found")
@@ -45,6 +43,5 @@ def update_revenue(month_id: int, body: MonthEntry):
 
 @router.delete("/{month_id}")
 def delete_revenue(month_id: int):
-    okf_db.init()
     okf_db.delete_month(month_id)
     return {"ok": True}
