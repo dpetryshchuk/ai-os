@@ -294,6 +294,94 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_outreach_contact",
+            "description": "Log a new LinkedIn outreach contact. Use when the user says they messaged or connected with someone.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name":         {"type": "string", "description": "Full name"},
+                    "company":      {"type": "string"},
+                    "linkedin_url": {"type": "string"},
+                    "message_sent": {"type": "string", "description": "The message you sent them"},
+                    "status":       {"type": "string", "enum": ["sent", "connected", "replied", "converted", "ignored"], "description": "Default: sent"},
+                    "notes":        {"type": "string"},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_outreach_contact",
+            "description": "Update an outreach contact's status or notes. Use when someone replied, connected, or converted.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contact_id": {"type": "string"},
+                    "status":     {"type": "string", "enum": ["sent", "connected", "replied", "converted", "ignored"]},
+                    "notes":      {"type": "string"},
+                },
+                "required": ["contact_id", "status"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_outreach_contacts",
+            "description": "List outreach contacts, optionally filtered by status. Use to check pipeline or find a specific contact.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {"type": "string", "enum": ["sent", "connected", "replied", "converted", "ignored"], "description": "Optional filter"},
+                    "limit":  {"type": "integer", "description": "Max to return, default 30"},
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_outreach_stats",
+            "description": "Get outreach funnel stats: counts by status, today's outreach, hours logged today.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "log_outreach_hours",
+            "description": "Log hours spent on outreach for a session. Date defaults to today.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "hours": {"type": "number", "description": "Hours worked"},
+                    "notes": {"type": "string", "description": "What you worked on"},
+                    "date":  {"type": "string", "description": "Date YYYY-MM-DD, defaults to today"},
+                },
+                "required": ["hours"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_outreach_retro",
+            "description": "Get weekly outreach retro showing funnel metrics per week.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "weeks": {"type": "integer", "description": "Number of weeks to show, default 4"},
+                },
+                "required": [],
+            },
+        },
+    },
 ]
 
 
@@ -454,8 +542,7 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             return json.dumps(essays)
 
         elif name == "read_code_file":
-            from pathlib import Path
-            rel_path = args.get("path", "").lstrip("/")
+            rel_path = inputs.get("path", "").lstrip("/")
             base = Path(__file__).parent
             target = (base / rel_path).resolve()
             if not str(target).startswith(str(base.resolve())):
@@ -468,8 +555,7 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             return json.dumps(result)
 
         elif name == "edit_code_file":
-            from pathlib import Path
-            rel_path = args.get("path", "").lstrip("/")
+            rel_path = inputs.get("path", "").lstrip("/")
             base = Path(__file__).parent
             target = (base / rel_path).resolve()
             if not str(target).startswith(str(base.resolve())):
@@ -477,8 +563,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             elif not target.exists():
                 result = {"error": f"File not found: {rel_path}"}
             else:
-                old_str = args.get("old_string", "")
-                new_str = args.get("new_string", "")
+                old_str = inputs.get("old_string", "")
+                new_str = inputs.get("new_string", "")
                 content = target.read_text()
                 count = content.count(old_str)
                 if count == 0:
@@ -492,15 +578,14 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
 
         elif name == "git_commit_and_push":
             import subprocess
-            from pathlib import Path
             from config import settings as app_settings
 
-            repo_root = Path(__file__).parent.parent  # one level up from aios/
-            msg = args.get("message", "agent edit")
-            files = args.get("files", [])
+            repo_root = Path(__file__).parent.parent
+            msg = inputs.get("message", "agent edit")
+            files = inputs.get("files", [])
 
             env = {
-                **__import__("os").environ,
+                **os.environ,
                 "GIT_AUTHOR_NAME": app_settings.git_author_name,
                 "GIT_AUTHOR_EMAIL": app_settings.git_author_email,
                 "GIT_COMMITTER_NAME": app_settings.git_author_name,
@@ -534,9 +619,8 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
             return json.dumps(result)
 
         elif name == "list_code_files":
-            from pathlib import Path
             base = Path(__file__).parent
-            subdir = args.get("subdir", "").lstrip("/")
+            subdir = inputs.get("subdir", "").lstrip("/")
             target = (base / subdir).resolve() if subdir else base.resolve()
             if not str(target).startswith(str(base.resolve())):
                 result = {"error": "Access denied"}
@@ -549,6 +633,63 @@ async def run_tool(name: str, inputs: dict, pool: asyncpg.Pool) -> str:
                         files.append(str(p.relative_to(base)))
                 result = {"files": files}
             return json.dumps(result)
+
+        elif name == "add_outreach_contact":
+            import okf_db
+            okf_db.init()
+            contact = okf_db.create_outreach_contact({
+                "name": inputs["name"],
+                "company": inputs.get("company", ""),
+                "linkedin_url": inputs.get("linkedin_url", ""),
+                "message_sent": inputs.get("message_sent", ""),
+                "status": inputs.get("status", "sent"),
+                "notes": inputs.get("notes", ""),
+            })
+            return json.dumps({"ok": True, "contact": contact})
+
+        elif name == "update_outreach_contact":
+            import okf_db
+            okf_db.init()
+            row = okf_db.list_outreach_contacts(limit=200)
+            match = next((c for c in row if c["id"] == inputs["contact_id"]), None)
+            if not match:
+                return json.dumps({"error": "Contact not found"})
+            updated = okf_db.update_outreach_contact(inputs["contact_id"], {
+                "name": match["name"],
+                "company": match.get("company", ""),
+                "linkedin_url": match.get("linkedin_url", ""),
+                "message_sent": match.get("message_sent", ""),
+                "status": inputs["status"],
+                "notes": inputs.get("notes", match.get("notes", "")),
+            })
+            return json.dumps({"ok": True, "contact": updated})
+
+        elif name == "list_outreach_contacts":
+            import okf_db
+            okf_db.init()
+            contacts = okf_db.list_outreach_contacts(
+                limit=inputs.get("limit", 30),
+                status=inputs.get("status"),
+            )
+            return json.dumps(contacts, default=str)
+
+        elif name == "get_outreach_stats":
+            import okf_db
+            okf_db.init()
+            return json.dumps(okf_db.get_outreach_stats())
+
+        elif name == "log_outreach_hours":
+            import okf_db
+            from datetime import date as _date
+            okf_db.init()
+            day = inputs.get("date") or str(_date.today())
+            session = okf_db.log_session_hours(day, inputs["hours"], inputs.get("notes", ""))
+            return json.dumps({"ok": True, "session": session})
+
+        elif name == "get_outreach_retro":
+            import okf_db
+            okf_db.init()
+            return json.dumps(okf_db.get_weekly_retro(inputs.get("weeks", 4)), default=str)
 
         else:
             return json.dumps({"error": f"Unknown tool: {name}"})
