@@ -501,6 +501,45 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_ledger",
+            "description": "Search Dima's personal-finance ledger (every bank/credit transaction). Filter by free-text search, category, account, direction (in/out), and month. Returns matching rows plus the net amount spent. Use for questions like 'how much did I spend at Costco in June' or 'show my dining transactions'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "search": {"type": "string", "description": "Free-text match on description/category/subcategory"},
+                    "category": {"type": "string", "description": "Exact category, e.g. 'Groceries', 'Dining', 'Business Tools'"},
+                    "account": {"type": "string", "description": "Exact account, e.g. 'Bank Checking', 'Bank CC'"},
+                    "direction": {"type": "string", "enum": ["in", "out", "all"], "description": "in = income, out = spend"},
+                    "month": {"type": "string", "description": "Month filter: 'Jun', '2026-06', or '06'"},
+                    "limit": {"type": "integer", "description": "Max rows to return (default 50)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "finance_spend_summary",
+            "description": "Summarize spend by category for a month (or all-time), with income and the budget envelope for each category. Use for 'how am I tracking against budget' or 'where did my money go in May'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "month": {"type": "string", "description": "Month: 'Jun', '2026-06', or '06'. Omit for all-time."},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "finance_overview",
+            "description": "Get the finance dashboard headline numbers: P&L overview, account balances, debts, credit card usage, monthly burn, tool subscriptions, and data-freshness dates. Use for 'what's my financial state' or 'how much runway do I have'.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
 ]
 
 
@@ -1027,6 +1066,106 @@ async def _tool_fetch_url(inputs, pool):
                 return json.dumps({"ok": False, "error": str(exc)})
 
 
+# ── Finance tools ────────────────────────────────────────────────────────────
+# Read the personal-finances ledger + dashboard data so Ima can answer finance
+# questions by chat, not just the UI. Data comes from the same source the
+# /api/finances endpoints serve (ledger.csv + data.js).
+
+_MON_TO_NUM = {"Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04", "May": "05", "Jun": "06",
+               "Jul": "07", "Aug": "08", "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12"}
+
+
+def _month_to_ym(month: str) -> str | None:
+    """Accept 'Jun', '2026-06', or '06' and return a 'YYYY-MM' suffix to match on."""
+    if not month:
+        return None
+    m = month.strip()
+    if len(m) == 7 and m[4] == "-":
+        return m
+    return _MON_TO_NUM.get(m[:3].title())
+
+
+async def _tool_query_ledger(inputs, pool):
+    from routers.finances import read_ledger_rows
+    rows = read_ledger_rows()
+    search = (inputs.get("search") or "").strip().lower()
+    category = inputs.get("category")
+    account = inputs.get("account")
+    direction = inputs.get("direction")
+    ym = _month_to_ym(inputs.get("month", ""))
+    limit = int(inputs.get("limit", 50))
+
+    out = []
+    for r in rows:
+        if direction and direction != "all" and r["direction"] != direction:
+            continue
+        if category and r["category"] != category:
+            continue
+        if account and r["account"] != account:
+            continue
+        if ym:
+            if len(ym) == 7 and r["date"][:7] != ym:
+                continue
+            if len(ym) == 2 and r["date"][5:7] != ym:
+                continue
+        if search:
+            hay = f"{r['description']} {r['category']} {r['subcategory']}".lower()
+            if search not in hay:
+                continue
+        out.append(r)
+
+    out.sort(key=lambda r: r["date"], reverse=True)
+    total = sum(r["amount"] if r["direction"] == "out" else -r["amount"] for r in out)
+    return json.dumps({"count": len(out), "net_out": round(total, 2), "rows": out[:limit]}, default=str)
+
+
+async def _tool_finance_spend_summary(inputs, pool):
+    from routers.finances import read_ledger_rows, extract_js_literal, _src
+    rows = read_ledger_rows()
+    ym = _month_to_ym(inputs.get("month", "")) or ""
+
+    by_cat: dict[str, float] = {}
+    income = 0.0
+    for r in rows:
+        if ym:
+            d = r["date"]
+            if (len(ym) == 7 and d[:7] != ym) or (len(ym) == 2 and d[5:7] != ym):
+                continue
+        if r["direction"] == "in":
+            income += r["amount"]
+        else:
+            by_cat[r["category"]] = by_cat.get(r["category"], 0.0) + r["amount"]
+
+    budgets = {}
+    try:
+        bp = _src() / "budgets.js"
+        if bp.exists():
+            budgets = extract_js_literal(bp.read_text(encoding="utf-8"), "BUDGETS") or {}
+    except Exception:
+        budgets = {}
+
+    cats = sorted(by_cat.items(), key=lambda kv: kv[1], reverse=True)
+    spend = [{"category": c, "spent": round(v, 2), "budget": budgets.get(c)} for c, v in cats]
+    return json.dumps({
+        "month": inputs.get("month") or "all-time",
+        "income": round(income, 2),
+        "total_spent": round(sum(by_cat.values()), 2),
+        "by_category": spend,
+    }, default=str)
+
+
+async def _tool_finance_overview(inputs, pool):
+    from routers.finances import extract_js_literal, _src
+    p = _src() / "data.js"
+    if not p.exists():
+        return json.dumps({"error": "Finances data not available"})
+    data = extract_js_literal(p.read_text(encoding="utf-8"), "DATA") or {}
+    overview = {k: data.get(k) for k in (
+        "overview", "accounts", "debt", "ccLimit", "ccDebt", "june", "burn", "pl", "tools", "dataAsOf",
+    ) if k in data}
+    return json.dumps(overview, default=str)
+
+
 _TOOL_HANDLERS = {
     "upsert_company": _tool_upsert_company,
     "upsert_contact": _tool_upsert_contact,
@@ -1058,6 +1197,9 @@ _TOOL_HANDLERS = {
     "semantic_search": _tool_semantic_search,
     "run_shell": _tool_run_shell,
     "fetch_url": _tool_fetch_url,
+    "query_ledger": _tool_query_ledger,
+    "finance_spend_summary": _tool_finance_spend_summary,
+    "finance_overview": _tool_finance_overview,
 }
 
 
